@@ -213,3 +213,25 @@ aws/route53-dns-update*.json
 aws/terraform/tfplan*
 simple_backend.py
 aws/terraform/user_data_*.sh
+deployment_trigger.txt
+*_deploy.sh
+deploy-*.sh
+
+# Documentation files (keep only main README.md)
+DEVELOPMENT.md
+QUICKSTART.md
+ARCHITECTURE.md
+docs/
+!docs/README.md
+
+# Test documents and PDFs
+tests/downloaded_documents/
+tests/new_downloaded_documents/
+
+# Database files
+*.db
+*.sqlite3
+
+# Screenshots and media
+docs/screenshots/
+homepage.png

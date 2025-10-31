@@ -1,82 +1,98 @@
-# CityCamp AI Documentation
+# CivicSpark AI Documentation
 
-Welcome to the CityCamp AI documentation. This directory contains all project documentation organized by topic.
+## Archived Demo Repository
 
-The Tulsa Archive Scraper system can scrape all historical documents (2020-2025) from the official City of Tulsa Council Archive, supporting 16 different meeting types including Regular Council, committees, and task forces. See [TULSA_ARCHIVE_SCRAPER_README.md](TULSA_ARCHIVE_SCRAPER_README.md) for complete details.
+This documentation is for an archived demo repository. The CivicSpark AI project continues in active development with a new, more cost-efficient architecture.
 
-## Documentation Index
+## Overview
 
-### Getting Started
-- **[QUICKSTART.md](QUICKSTART.md)** - Fast setup for local development
+CivicSpark AI was a proof-of-concept platform designed to improve civic engagement in Tulsa, Oklahoma by connecting residents with city government through AI-powered tools.
 
-### Setup & Configuration
-- **[ENVIRONMENT_SETUP.md](ENVIRONMENT_SETUP.md)** - Environment variables and .env files guide
+## Core Components
 
-### Troubleshooting
-- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
+### 1. AI Chatbot
+- GPT-4 powered conversational interface
+- RAG system for document-based answers
+- Context-aware responses about city government
 
-### Data Collection & Scraping
-- **[TULSA_ARCHIVE_SCRAPER_README.md](TULSA_ARCHIVE_SCRAPER_README.md)** - Historical document scraping system
+### 2. Meeting Management
+- Automated scraping of city council meetings
+- AI categorization of agenda items
+- Searchable meeting minutes and records
 
-### System Information
-- **[RAG_SYSTEM_README.md](RAG_SYSTEM_README.md)** - Retrieval Augmented Generation system
-- **[SECURITY_SETUP.md](SECURITY_SETUP.md)** - Security configuration
-- **[TWILIO_SETUP.md](TWILIO_SETUP.md)** - SMS notification setup
-- **[GEOJSON_DISTRICT_BOUNDARIES.md](GEOJSON_DISTRICT_BOUNDARIES.md)** - District mapping data
+### 3. Notification System
+- Topic-based subscription service
+- SMS and email delivery
+- Automated meeting alerts
 
-## Project Structure
+### 4. Community Features
+- Organization directory
+- Campaign management
+- Representative contact tools
 
+## Technical Architecture
+
+### Frontend Stack
+- React 18 with TypeScript
+- Tailwind CSS for styling
+- Vite for build tooling
+- React Router for navigation
+
+### Backend Stack
+- FastAPI framework
+- PostgreSQL database
+- Redis caching layer
+- OpenAI API integration
+
+### Infrastructure
+- AWS ECS for container orchestration
+- RDS for managed PostgreSQL
+- ElastiCache for Redis
+- S3 and CloudFront for static assets
+
+## Setup Instructions
+
+For local development setup, refer to the main README.md file in the repository root.
+
+## API Documentation
+
+When running locally, interactive API documentation is available at:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+## Testing
+
+The project includes:
+- Backend unit tests using pytest
+- Frontend component tests
+- API endpoint testing
+
+Run tests with:
+```bash
+# Backend
+cd backend && pytest
+
+# Frontend
+cd frontend && npm test
 ```
-CityCamp_AI/
-├── docs/                  # All documentation (you are here!)
-│   ├── README.md          # This file - documentation index
-│   ├── QUICKSTART.md      # Quick setup guide
-│   ├── ENVIRONMENT_SETUP.md # Environment configuration
-│   ├── TROUBLESHOOTING.md # Common issues and solutions
-│   └── screenshots/       # Application screenshots
-├── backend/              # FastAPI backend application
-├── frontend/             # React frontend application
-├── scripts/              # Utility scripts for development and deployment
-└── tests/               # Test files and documentation
-```
 
-## Core System Features
+## Deployment
 
-### Backend (FastAPI + SQLAlchemy + PostgreSQL)
-- **RESTful API** - Complete CRUD operations for all resources
-- **Authentication** - JWT-based user authentication and authorization
-- **Database** - PostgreSQL with Alembic migrations
-- **AI Integration** - OpenAI GPT-4 for document processing and chatbot
-- **Document Processing** - PDF parsing and text extraction
-- **Web Scraping** - Automated meeting data collection
+The application was deployed to AWS using:
+- Terraform for infrastructure as code
+- Docker containers for application packaging
+- GitHub Actions for CI/CD
 
-### Frontend (React + TypeScript + Tailwind CSS)
-- **Modern UI** - Responsive design with Tailwind CSS
-- **Real-time Updates** - Live data updates for meetings and campaigns
-- **Interactive Maps** - District boundaries and representative mapping
-- **Document Viewer** - In-browser PDF viewing and highlighting
+Deployment configurations are available in the `aws/` directory.
 
-### AI & Natural Language Processing
-- **Chatbot** - GPT-4 powered conversational interface
-- **RAG System** - Retrieval-Augmented Generation for document queries
-- **Content Categorization** - Automatic topic classification
-- **Semantic Search** - Vector-based document similarity search
+## Contributing
 
-## Quick Navigation
+This demo repository is archived and not accepting contributions. The CivicSpark AI project continues in active development.
 
-- **Need to get started quickly?** → [QUICKSTART.md](QUICKSTART.md)
-- **Setting up environment variables?** → [ENVIRONMENT_SETUP.md](ENVIRONMENT_SETUP.md)
-- **Running into issues?** → [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
-- **Working with scrapers?** → [TULSA_ARCHIVE_SCRAPER_README.md](TULSA_ARCHIVE_SCRAPER_README.md)
-- **Setting up RAG system?** → [RAG_SYSTEM_README.md](RAG_SYSTEM_README.md)
+## License
 
-## Support
+MIT License
 
-For additional help or questions:
-1. Check the relevant documentation files above
-2. Review the troubleshooting guide
-3. Check the GitHub issues and discussions
+## Contact
 
----
-
-**Note**: This documentation is kept up-to-date with the latest system features and configuration requirements.
+For questions about this archived demo repository or the ongoing CivicSpark AI project: kaitlin.cort@owasp.org
