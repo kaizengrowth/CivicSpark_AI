@@ -104,9 +104,7 @@ cd frontend && npm install && npm run dev
 | Document | Description |
 |----------|-------------|
 | [RAG System](docs/RAG_SYSTEM_README.md) | Document processing and vector search |
-| [Vercel Deployment](docs/VERCEL_DEPLOYMENT.md) | Deploy on Vercel + Render free tier |
 | [AWS Deployment](docs/aws-deployment-guide.md) | Production infrastructure |
-| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues |
 
 ---
 
