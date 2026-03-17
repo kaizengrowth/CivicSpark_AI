@@ -95,12 +95,22 @@ aws-exports.js
 awsconfiguration.json
 
 # Environment files with potential secrets
-.env*
+.env
+.env.*
+**/.env
+**/.env.*
 !.env.example
 !.env.template
+secrets/
 .secrets
 secrets.json
 config.local.json
+
+# Terraform (often contains secrets)
+*.tfvars
+!*.tfvars.example
+terraform.tfvars
+!terraform.tfvars.example
 
 # Deployment scripts with hardcoded values
 deploy-*.sh

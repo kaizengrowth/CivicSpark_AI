@@ -1,0 +1,23 @@
+# Gitleaks config for CivicSpark AI
+# Skips known template/example files; scans everything else for secrets
+# https://github.com/gitleaks/gitleaks
+
+title = "CivicSpark AI Secret Scan"
+
+[extend]
+useDefault = true
+
+# Skip scanning these template/example files (they contain placeholder values only)
+[allowlist]
+description = "Known template files with placeholder values"
+paths = [
+  '''backend/env\.example''',
+  '''\.env\.example''',
+  '''\.env\.template''',
+  '''terraform\.tfvars\.example''',
+  '''docker-compose\.yml''',
+  '''docker-compose\.prod\.yml''',
+  '''\.github/workflows/test\.yml''',
+  '''\.github/workflows/.*\.disabled''',
+  '''README\.md''',
+]

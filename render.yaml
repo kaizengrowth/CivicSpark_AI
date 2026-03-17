@@ -1,0 +1,33 @@
+# Render Blueprint for CivicSpark AI Backend
+# Deploy: Connect repo at https://dashboard.render.com/select-repo?type=blueprint
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: civicspark-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile.prod
+    dockerContext: ./backend
+    plan: free
+
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: civicspark-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEOCODIO_API_KEY
+        sync: false
+      - key: REDIS_URL
+        value: redis://localhost:6379
+
+databases:
+  - name: civicspark-db
+    plan: free

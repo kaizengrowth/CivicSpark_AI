@@ -33,4 +33,5 @@ USER appuser
 EXPOSE 8000
 
 # Run the application (production mode)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use PORT env var for Render/Vercel compatibility (default 8000)
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
