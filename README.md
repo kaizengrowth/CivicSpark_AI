@@ -21,10 +21,6 @@ A comprehensive CivicTech platform connecting Tulsa residents with city governme
 
 *CivicSpark AI homepage — AI-powered civic engagement platform connecting Tulsa residents with city government*
 
-![CivicSpark AI Hero](frontend/src/assets/images/Hero.png)
-
-*Platform hero section showing the core value proposition for Tulsa civic participation*
-
 ## 🌟 Features
 
 ### 🤖 **AI-Powered Civic Assistant**
