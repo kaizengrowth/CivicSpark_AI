@@ -1,15 +1,39 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { Link } from 'react-router-dom';
 import { apiRequest, API_ENDPOINTS } from '../config/api';
+
+interface Citation {
+  chunk_id: number;
+  quote: string;
+  source_url?: string | null;
+  deep_link?: string | null;
+  meeting_title?: string | null;
+  meeting_date?: string | null;
+  item_number?: string | null;
+  page?: number | null;
+}
+
+interface ChatApiResponse {
+  response: string;
+  success: boolean;
+  intent?: string;
+  status?: 'answered' | 'partial' | 'refused';
+  citations?: Citation[];
+  unsupported_claims?: string[];
+  error?: string;
+}
 
 interface ChatMessage {
   id: number;
   text: string;
   isUser: boolean;
   timestamp: Date;
+  status?: 'answered' | 'partial' | 'refused' | 'error';
+  citations?: Citation[];
+  unsupportedClaims?: string[];
 }
 
-// Proper types for markdown components
 interface MarkdownLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   href?: string;
   children?: React.ReactNode;
@@ -19,9 +43,7 @@ interface MarkdownElementProps extends React.HTMLAttributes<HTMLElement> {
   children?: React.ReactNode;
 }
 
-// Custom components for markdown rendering
 const MarkdownComponents = {
-  // Handle links with proper styling and external opening
   a: ({ href, children, ...props }: MarkdownLinkProps) => (
     <a
       href={href}
@@ -33,111 +55,111 @@ const MarkdownComponents = {
       {children}
     </a>
   ),
-  // Handle paragraphs with proper spacing
   p: ({ children, ...props }: MarkdownElementProps) => (
     <p className="mb-2 last:mb-0" {...props}>
       {children}
     </p>
   ),
-  // Handle lists with proper styling
   ul: ({ children, ...props }: MarkdownElementProps) => (
     <ul className="list-disc list-inside mb-2 ml-2" {...props}>
       {children}
     </ul>
-  ),
-  ol: ({ children, ...props }: MarkdownElementProps) => (
-    <ol className="list-decimal list-inside mb-2 ml-2" {...props}>
-      {children}
-    </ol>
   ),
   li: ({ children, ...props }: MarkdownElementProps) => (
     <li className="mb-1" {...props}>
       {children}
     </li>
   ),
-  // Handle strong/bold text
   strong: ({ children, ...props }: MarkdownElementProps) => (
     <strong className="font-semibold" {...props}>
       {children}
     </strong>
   ),
-  // Handle emphasis/italic text
-  em: ({ children, ...props }: MarkdownElementProps) => (
-    <em className="italic" {...props}>
-      {children}
-    </em>
-  ),
-  // Handle code blocks
-  code: ({ children, ...props }: MarkdownElementProps) => (
-    <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono" {...props}>
-      {children}
-    </code>
-  ),
-  // Handle blockquotes
-  blockquote: ({ children, ...props }: MarkdownElementProps) => (
-    <blockquote className="border-l-4 border-gray-300 pl-4 italic mb-2" {...props}>
-      {children}
-    </blockquote>
-  ),
 };
 
-// Utility function to render markdown messages
-const renderMarkdownMessage = (text: string): React.ReactNode => {
-  if (!text) return null;
-
-  // Remove emoji/icons at the start of lines using Unicode emoji properties
-  let cleanedText = text
-    .split('\n')
-    .map(line => line.replace(/^[\s\p{Emoji_Presentation}\p{Extended_Pictographic}]+/gu, ''))
-    .join('\n');
-
-  // Convert inline dash or bullet lists to Markdown lists
-  cleanedText = cleanedText.replace(/((?:- |• )[\s\S]+?)(?=(?:\n\n|$))/g, (match) => {
-    // Split by dash or bullet, filter out empty, and join as Markdown list
-    const items = match.split(/(?:- |• )/).map(s => s.trim()).filter(Boolean);
-    if (items.length > 1) {
-      return '\n\n' + items.map(s => `- ${s}`).join('\n') + '\n';
+/**
+ * Replace [c:ID] markers with superscript reference numbers keyed to
+ * the message's citation list.
+ */
+const formatWithCitations = (
+  text: string,
+  citations: Citation[]
+): { markdown: string; ordered: Citation[] } => {
+  const ordered: Citation[] = [];
+  const markdown = text.replace(/\[c:(\d+)\]/g, (_match, idRaw) => {
+    const chunkId = Number(idRaw);
+    let index = ordered.findIndex((c) => c.chunk_id === chunkId);
+    if (index === -1) {
+      const citation = citations.find((c) => c.chunk_id === chunkId);
+      if (!citation) return '';
+      ordered.push(citation);
+      index = ordered.length - 1;
     }
-    return match;
+    return `[^${index + 1}]`;
   });
+  return { markdown: markdown.replace(/\[\^(\d+)\]/g, ' **[$1]**'), ordered };
+};
 
+const CitationList: React.FC<{ citations: Citation[] }> = ({ citations }) => {
+  if (!citations.length) return null;
   return (
-    <ReactMarkdown
-      components={MarkdownComponents}
-      className="prose prose-sm max-w-none text-brand-dark-blue"
-    >
-      {cleanedText}
-    </ReactMarkdown>
+    <ol className="mt-2 border-t border-gray-200 pt-2 space-y-1">
+      {citations.map((citation, i) => (
+        <li key={`${citation.chunk_id}-${i}`} className="text-xs text-gray-600">
+          <span className="font-semibold">[{i + 1}]</span>{' '}
+          {citation.meeting_title && (
+            <span>
+              {citation.meeting_title}
+              {citation.meeting_date && ` (${citation.meeting_date})`}
+              {citation.item_number && `, item ${citation.item_number}`}
+              {' — '}
+            </span>
+          )}
+          {citation.deep_link && (
+            <Link to={citation.deep_link} className="text-blue-600 underline">
+              view item
+            </Link>
+          )}
+          {citation.deep_link && citation.source_url && ' · '}
+          {citation.source_url && (
+            <a
+              href={citation.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline"
+            >
+              source{citation.page ? ` p.${citation.page}` : ''} ↗
+            </a>
+          )}
+        </li>
+      ))}
+    </ol>
   );
 };
+
+const WELCOME =
+  "Hi! I answer questions about **Tulsa city government** using the " +
+  'official meeting record — every claim comes with a citation you can ' +
+  'check. If the records don’t support an answer, I’ll say so ' +
+  'instead of guessing.\n\nTry asking about recent agenda items, votes, ' +
+  'or who represents your address.';
 
 export const ChatbotWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 1,
-      text: "Hello! I'm your **CivicSpark AI assistant** for Tulsa civic engagement.\n\nI can help you with:\n• 🏛️ City council meetings and agendas\n• 📋 Local campaigns and initiatives\n• 🔔 Setting up notifications\n• 🗳️ Civic participation opportunities\n\nWhat would you like to know about **Tulsa** local government?",
-      isUser: false,
-      timestamp: new Date(),
-    },
+    { id: 1, text: WELCOME, isUser: false, timestamp: new Date() },
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
-    }
+    if (isOpen && inputRef.current) inputRef.current.focus();
   }, [isOpen]);
 
   const handleSendMessage = async () => {
@@ -149,105 +171,97 @@ export const ChatbotWidget: React.FC = () => {
       isUser: true,
       timestamp: new Date(),
     };
-
     const messageText = inputValue;
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInputValue('');
     setIsTyping(true);
 
     try {
-      // Prepare conversation history for API
-      const conversationHistory = messages.map(msg => ({
+      const conversationHistory = messages.map((msg) => ({
         text: msg.text,
-        sender: msg.isUser ? 'user' : 'bot'
+        sender: msg.isUser ? 'user' : 'bot',
       }));
 
-      // Call the API
-      const response = await apiRequest<{response: string; success: boolean; error?: string}>(
-        API_ENDPOINTS.chatbot,
+      const response = await apiRequest<ChatApiResponse>(API_ENDPOINTS.chatbot, {
+        method: 'POST',
+        body: JSON.stringify({
+          message: messageText,
+          conversation_history: conversationHistory,
+        }),
+      });
+
+      setMessages((prev) => [
+        ...prev,
         {
-          method: 'POST',
-          body: JSON.stringify({
-            message: messageText,
-            conversation_history: conversationHistory
-          }),
-        }
-      );
-
-      const botMessage: ChatMessage = {
-        id: Date.now() + 1,
-        text: response.response,
-        isUser: false,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, botMessage]);
-    } catch (error) {
-      console.error('Error getting AI response:', error);
-
-      // Fallback to local response if API fails
-      const botMessage: ChatMessage = {
-        id: Date.now() + 1,
-        text: getBotResponse(messageText),
-        isUser: false,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, botMessage]);
+          id: Date.now() + 1,
+          text: response.response,
+          isUser: false,
+          timestamp: new Date(),
+          status: response.status || 'answered',
+          citations: response.citations || [],
+          unsupportedClaims: response.unsupported_claims || [],
+        },
+      ]);
+    } catch {
+      // Honest failure — no canned fake answers
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          text:
+            "I couldn't reach the server. The meeting records are still " +
+            'browsable on the [Meetings page](/meetings).',
+          isUser: false,
+          timestamp: new Date(),
+          status: 'error',
+        },
+      ]);
     } finally {
       setIsTyping(false);
     }
   };
 
-  const getBotResponse = (userInput: string): string => {
-    const input = userInput.toLowerCase();
-
-    // Check if the question is about Tulsa - if not, provide guardrail response
-    if (!input.includes('tulsa') && !input.includes('city') && !input.includes('council') &&
-        !input.includes('meeting') && !input.includes('campaign') && !input.includes('civic') &&
-        !input.includes('government') && !input.includes('local') && !input.includes('mayor') &&
-        !input.includes('election') && !input.includes('petition') && !input.includes('notification')) {
-      return "I'm specifically designed to help with **Tulsa, Oklahoma** civic engagement and local government matters.\n\nI can assist you with:\n• City council meetings and agendas\n• Local campaigns and initiatives\n• Civic participation opportunities\n• Government services and information\n\nPlease ask me about **Tulsa** local government topics!";
-    }
-
-    if (input.includes('meeting') || input.includes('council')) {
-      return "I can help you find information about **Tulsa City Council meetings**!\n\nYou can:\n• View upcoming meetings and agendas on the [Meetings page](/meetings)\n• Read past meeting minutes and summaries\n• Get notifications about meetings that interest you\n\nFor official information, visit the [City of Tulsa website](https://www.cityoftulsa.org/government/city-council/)\n\nWhat specific meeting information are you looking for?";
-    }
-
-    if (input.includes('campaign') || input.includes('petition')) {
-      return "**CivicSpark AI** helps you stay informed about local Tulsa campaigns and petitions.\n\nCheck out the [Campaigns page](/campaigns) to:\n• See active initiatives in Tulsa\n• Learn about local ballot measures\n• Find ways to get involved in your community\n\nIs there a specific **Tulsa** campaign or issue you're interested in?";
-    }
-
-    if (input.includes('notification') || input.includes('alert')) {
-      return "You can set up **personalized notifications** for Tulsa civic activities!\n\nGo to your [Profile settings](/profile) to:\n• Get alerts about upcoming meetings\n• Receive updates on campaigns you care about\n• Set preferences for topics that matter to you\n\nWould you like help setting up notifications?";
-    }
-
-    if (input.includes('hello') || input.includes('hi')) {
-      return "Hello! I'm here to help you stay engaged with **Tulsa local government**.\n\nYou can ask me about:\n• City council meetings and agendas\n• Local campaigns and initiatives\n• Civic participation opportunities\n• Government services and information\n\nWhat would you like to know about **Tulsa**?";
-    }
-
-    return "I'm here to help you stay informed about **Tulsa local government** activities.\n\nYou can ask me about:\n• City council meetings and agendas\n• Local campaigns and initiatives\n• Civic participation opportunities\n• Using the Civic Spark AI platform\n\nFor official information, visit the [City of Tulsa website](https://www.cityoftulsa.org/)\n\nWhat would you like to know about **Tulsa**?";
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSendMessage();
-    }
+  const renderBotMessage = (message: ChatMessage) => {
+    const { markdown, ordered } = formatWithCitations(
+      message.text,
+      message.citations || []
+    );
+    return (
+      <>
+        {message.status === 'refused' && (
+          <p className="text-xs font-semibold text-amber-700 mb-1">
+            No verified answer available
+          </p>
+        )}
+        <ReactMarkdown
+          components={MarkdownComponents}
+          className="prose prose-sm max-w-none text-brand-dark-blue"
+        >
+          {markdown}
+        </ReactMarkdown>
+        <CitationList citations={ordered.length ? ordered : message.citations || []} />
+        {(message.unsupportedClaims || []).length > 0 && (
+          <p className="mt-2 text-xs text-amber-700">
+            {message.unsupportedClaims!.length} unverified claim
+            {message.unsupportedClaims!.length > 1 ? 's were' : ' was'} removed
+            from this answer.
+          </p>
+        )}
+      </>
+    );
   };
 
   return (
     <div className="fixed bottom-4 right-4 z-50">
-      {/* Chat Widget */}
       {isOpen && (
         <div className="mb-4 w-100 h-[32rem] bg-white rounded-lg shadow-xl border border-gray-200 flex flex-col">
-          {/* Header */}
           <div className="bg-brand-dark-blue text-white p-4 rounded-t-lg">
             <div className="flex items-start justify-between">
-              <div className="flex items-start space-x-2">
-                <div>
-                  <h4 className="font-semibold text-white">CivicSpark Assistant</h4>
-                  <p className="font-semibold text-xs text-brand-yellow">Ask me about Tulsa local government</p>
-                </div>
+              <div>
+                <h4 className="font-semibold text-white">CivicSpark Assistant</h4>
+                <p className="font-semibold text-xs text-brand-yellow">
+                  Cited answers from the Tulsa meeting record
+                </p>
               </div>
               <button
                 onClick={() => setIsOpen(false)}
@@ -259,7 +273,6 @@ export const ChatbotWidget: React.FC = () => {
             </div>
           </div>
 
-          {/* Messages */}
           <div className="flex-1 p-4 overflow-y-auto bg-gray-50">
             <div className="space-y-4">
               {messages.map((message) => (
@@ -271,16 +284,23 @@ export const ChatbotWidget: React.FC = () => {
                     className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
                       message.isUser
                         ? 'bg-brand-medium-blue text-white'
-                        : 'bg-white text-gray-800 border border-gray-200'
+                        : message.status === 'refused' || message.status === 'error'
+                          ? 'bg-amber-50 text-gray-800 border border-amber-200'
+                          : 'bg-white text-gray-800 border border-gray-200'
                     }`}
                   >
                     <div className="text-sm">
-                      {message.isUser ? message.text : renderMarkdownMessage(message.text)}
+                      {message.isUser ? message.text : renderBotMessage(message)}
                     </div>
-                    <p className={`text-xs mt-2 ${
-                      message.isUser ? 'text-primary-100' : 'text-gray-500'
-                    }`}>
-                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <p
+                      className={`text-xs mt-2 ${
+                        message.isUser ? 'text-primary-100' : 'text-gray-500'
+                      }`}
+                    >
+                      {message.timestamp.toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
                     </p>
                   </div>
                 </div>
@@ -291,8 +311,14 @@ export const ChatbotWidget: React.FC = () => {
                   <div className="bg-white text-gray-800 border border-gray-200 px-4 py-2 rounded-lg">
                     <div className="flex space-x-1">
                       <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      <div
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: '0.1s' }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: '0.2s' }}
+                      ></div>
                     </div>
                   </div>
                 </div>
@@ -301,7 +327,6 @@ export const ChatbotWidget: React.FC = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
           <div className="p-4 border-t border-gray-200 bg-white rounded-b-lg">
             <div className="flex space-x-2">
               <input
@@ -309,8 +334,8 @@ export const ChatbotWidget: React.FC = () => {
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Ask about Tulsa local government..."
+                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                placeholder="Ask about Tulsa city government..."
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-yellow focus:border-transparent text-sm"
               />
               <button
@@ -325,11 +350,11 @@ export const ChatbotWidget: React.FC = () => {
         </div>
       )}
 
-      {/* Chat Toggle Button */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
           className="bg-brand-red border-4 border-brand-yellow text-white p-4 rounded-full shadow-lg transition-colors hover:bg-brand-red focus:outline-none"
+          aria-label="Open chat"
         >
           <span className="text-xl">💬</span>
         </button>

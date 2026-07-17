@@ -23,11 +23,6 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     from_email: str | None = None
 
-    # Google Custom Search API
-    # TODO(phase-2): remove with research_service
-    google_api_key: str | None = None
-    google_cse_id: str | None = None
-
     # Ingestion
     ingest_api_token: str | None = None
     ingest_stale_after_days: int = 7

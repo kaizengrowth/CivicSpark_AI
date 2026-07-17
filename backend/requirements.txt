@@ -23,7 +23,6 @@ passlib[bcrypt]>=1.7.0
 # External APIs
 twilio>=8.10.0
 requests>=2.31.0
-google-api-python-client>=2.110.0  # TODO(phase-2): remove with research_service
 beautifulsoup4>=4.12.0
 
 # Document processing

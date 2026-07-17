@@ -1,10 +1,18 @@
+"""Grounded Q&A endpoint (cite-then-verify).
+
+Every non-refusal answer carries citations mapping claims to source
+chunks with deep links; verification strips unsupported claims and the
+response says so instead of hiding it.
+"""
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_db
-from app.services.chatbot_service import ChatbotService
+from app.services.qa import QAService
+from app.services.qa.llm import ANSWER_MODEL
 
 router = APIRouter()
 
@@ -19,24 +27,39 @@ class ChatRequest(BaseModel):
     conversation_history: list[ChatMessage] | None = None
 
 
+class Citation(BaseModel):
+    chunk_id: int
+    quote: str
+    source_url: str | None = None
+    deep_link: str | None = None
+    meeting_title: str | None = None
+    meeting_date: str | None = None
+    item_number: str | None = None
+    page: int | None = None
+
+
 class ChatResponse(BaseModel):
     response: str
     success: bool
+    intent: str | None = None
+    status: str = "answered"  # answered | partial | refused
+    citations: list[Citation] = []
+    unsupported_claims: list[str] = []
+    model_versions: list[str] = []
     error: str | None = None
 
 
 @router.get("/status")
 async def get_chatbot_status(settings: Settings = Depends(get_settings)):
-    """
-    Get chatbot configuration status
-    """
+    """Chatbot configuration status."""
     return {
         "openai_configured": settings.is_openai_configured,
-        "model": "gpt-4.1",
+        "model": ANSWER_MODEL,
         "features": {
-            "web_search": bool(settings.google_api_key and settings.google_cse_id),
-            "document_retrieval": True,
-            "function_calling": True,
+            "grounded_answers": True,
+            "mandatory_citations": True,
+            "claim_verification": True,
+            "structured_tools": ["district_lookup", "meeting_schedule"],
         },
         "status": "ready" if settings.is_openai_configured else "degraded",
     }
@@ -48,33 +71,34 @@ async def chat_with_ai(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    """
-    Send a message to the AI chatbot and get a response with enhanced research capabilities
-    """
+    """Answer a civic question with verified citations, or refuse."""
     try:
-        chatbot_service = ChatbotService(db, settings)
-
-        # Convert conversation history to the format expected by the service
         history = None
         if request.conversation_history:
             history = [
-                {"text": msg.text, "sender": msg.sender}
-                for msg in request.conversation_history
+                {"text": m.text, "sender": m.sender}
+                for m in request.conversation_history
             ]
 
-        # Get AI response with enhanced capabilities
-        ai_response = await chatbot_service.get_ai_response(
-            user_message=request.message, conversation_history=history
+        service = QAService(db, settings)
+        result = await service.answer(request.message, history)
+
+        return ChatResponse(
+            response=result["answer"],
+            success=True,
+            intent=result["intent"],
+            status=result["status"],
+            citations=[Citation(**c) for c in result["citations"]],
+            unsupported_claims=result["unsupported_claims"],
+            model_versions=result["model_versions"],
         )
-
-        return ChatResponse(response=ai_response, success=True)
-
     except Exception as e:
         return ChatResponse(
             response=(
-                "I'm sorry, I'm having trouble responding right now. "
-                "Please try again later."
+                "I'm having trouble answering right now. The meeting records "
+                "are still available under Meetings."
             ),
             success=False,
+            status="refused",
             error=str(e),
         )
