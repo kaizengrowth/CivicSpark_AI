@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import Text, cast
 from sqlalchemy.orm import Session
 
@@ -169,6 +170,72 @@ async def list_meetings(
         limit=pagination.limit,
     )
     return JSONResponse(content=jsonable_encoder(payload))
+
+
+class AgendaItemEvidence(BaseModel):
+    """Item-level JSON for the Meeting Explorer: deep-linkable, with
+    provenance back to the exact source PDF pages."""
+
+    id: int
+    meeting_id: int
+    item_number: str | None
+    title: str
+    description: str | None
+    section: str | None = None
+    topics: list[str] = []
+    entities: dict = {}
+    vote_result: str | None = None
+    source_page_start: int | None = None
+    source_page_end: int | None = None
+    deep_link: str
+    source_pdf_url: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+def _item_to_evidence(item: AgendaItem, meeting: Meeting) -> AgendaItemEvidence:
+    deep_link = f"/meetings/{meeting.id}"
+    if item.item_number:
+        deep_link += f"#item-{item.item_number}"
+    return AgendaItemEvidence(
+        id=item.id,
+        meeting_id=meeting.id,
+        item_number=item.item_number,
+        title=item.title,
+        description=item.description,
+        topics=item.topics or [],
+        entities=item.entities or {},
+        vote_result=item.vote_result,
+        source_page_start=item.source_page_start,
+        source_page_end=item.source_page_end,
+        deep_link=deep_link,
+        source_pdf_url=meeting.agenda_url or meeting.minutes_url,
+    )
+
+
+@router.get("/items/{item_id}", response_model=AgendaItemEvidence)
+async def get_agenda_item(item_id: int, db: Session = Depends(get_db)):
+    """One agenda item with provenance (shareable evidence unit)."""
+    item = db.query(AgendaItem).filter(AgendaItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Agenda item not found")
+    meeting = db.query(Meeting).filter(Meeting.id == item.meeting_id).first()
+    return _item_to_evidence(item, meeting)
+
+
+@router.get("/{meeting_id}/items", response_model=list[AgendaItemEvidence])
+async def get_meeting_items(meeting_id: int, db: Session = Depends(get_db)):
+    """Item-level JSON for a meeting (Meeting Explorer deep links)."""
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    items = (
+        db.query(AgendaItem)
+        .filter(AgendaItem.meeting_id == meeting_id)
+        .order_by(AgendaItem.id)
+        .all()
+    )
+    return [_item_to_evidence(item, meeting) for item in items]
 
 
 @router.get("/{meeting_id}", response_model=MeetingDetailResponse)

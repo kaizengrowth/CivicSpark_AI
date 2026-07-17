@@ -16,7 +16,12 @@ export const API_ENDPOINTS = {
   // Meetings
   meetings: '/api/v1/meetings/',
   meetingById: (id: number) => `/api/v1/meetings/${id}`,
-  meetingAgendaItems: (id: number) => `/api/v1/meetings/${id}/agenda-items`,
+  meetingItems: (id: number) => `/api/v1/meetings/${id}/items`,
+  agendaItemById: (id: number) => `/api/v1/meetings/items/${id}`,
+
+  // Evidence layer
+  search: '/api/v1/search/',
+  ingestStatus: '/api/v1/ingest/status',
 
   // Auth
   login: '/api/v1/auth/login',

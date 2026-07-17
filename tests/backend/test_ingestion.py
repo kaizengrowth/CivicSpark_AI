@@ -142,3 +142,10 @@ class TestEntities:
         assert entities["resolutions"] == ["31999"]
         assert 1 in entities["districts"]
         assert "Vanessa Hall-Harper" in entities["councilors"]
+
+    def test_district_colon_form(self):
+        """Real BOA agendas write 'City Council District: 7'."""
+        from app.ingestion.entities import extract_entities
+
+        entities = extract_entities("City Council District: 7\nApplicant: X")
+        assert entities["districts"] == [7]

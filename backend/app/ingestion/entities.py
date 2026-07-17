@@ -14,7 +14,7 @@ from app.data.tulsa_districts import DISTRICT_REPRESENTATIVES
 
 ORDINANCE_RE = re.compile(r"\bOrdinance\s+(?:No\.?\s*)?(\d{4,6})\b", re.I)
 RESOLUTION_RE = re.compile(r"\bResolution\s+(?:No\.?\s*)?(\d{4,6})\b", re.I)
-DISTRICT_RE = re.compile(r"\b(?:Council\s+)?District\s+(\d{1,2})\b", re.I)
+DISTRICT_RE = re.compile(r"\b(?:Council\s+)?District:?\s+(\d{1,2})\b", re.I)
 
 
 def _councilor_names() -> list[str]:
