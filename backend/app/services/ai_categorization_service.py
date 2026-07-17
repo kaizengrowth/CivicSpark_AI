@@ -4,22 +4,21 @@ import io
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
 
 import fitz  # PyMuPDF for better PDF text extraction
 
 # PDF processing
 import pypdf
-from app.core.config import settings
-from app.models.meeting import MeetingCategory
 
 # AI/ML imports
 from openai import OpenAI
-from PIL import Image
 from pydantic import BaseModel, Field
 
 # Database imports
 from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.models.meeting import MeetingCategory
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 class CategoryDefinition(BaseModel):
     name: str
     description: str
-    keywords: List[str]
+    keywords: list[str]
     color: str
     icon: str
 
@@ -43,19 +42,19 @@ class VotingRecord(BaseModel):
 
 class ProcessedMeetingContent(BaseModel):
     summary: str
-    categories: List[str]
-    keywords: List[str]
-    agenda_items: List[Dict]
+    categories: list[str]
+    keywords: list[str]
+    agenda_items: list[dict]
     impact_assessment: str
-    key_decisions: List[str]
-    public_comments: List[str]
+    key_decisions: list[str]
+    public_comments: list[str]
     # Enhanced fields for better tracking
     detailed_summary: str = ""
-    voting_records: List[VotingRecord]
-    vote_statistics: Dict[
-        str, Union[int, List[str]]
+    voting_records: list[VotingRecord]
+    vote_statistics: dict[
+        str, int | list[str]
     ]  # Allow both int and List[str] for council members
-    image_paths: List[str] = Field(default_factory=list)
+    image_paths: list[str] = Field(default_factory=list)
 
 
 class AICategorization:
@@ -67,8 +66,7 @@ class AICategorization:
         "municipal_services": CategoryDefinition(
             name="Municipal Services",
             description=(
-                "City services, utilities, waste management, "
-                "and basic infrastructure"
+                "City services, utilities, waste management, and basic infrastructure"
             ),
             keywords=[
                 "utilities",
@@ -85,7 +83,7 @@ class AICategorization:
         "public_safety": CategoryDefinition(
             name="Public Safety",
             description=(
-                "Police, fire, emergency services, " "and community safety initiatives"
+                "Police, fire, emergency services, and community safety initiatives"
             ),
             keywords=[
                 "police",
@@ -123,8 +121,7 @@ class AICategorization:
         "social_justice": CategoryDefinition(
             name="Social Justice",
             description=(
-                "Civil rights, discrimination, equality, "
-                "and social justice initiatives"
+                "Civil rights, discrimination, equality, and social justice initiatives"
             ),
             keywords=[
                 "civil rights",
@@ -141,8 +138,7 @@ class AICategorization:
         "immigration": CategoryDefinition(
             name="Immigration",
             description=(
-                "Immigration policy, refugee services, "
-                "and immigrant community support"
+                "Immigration policy, refugee services, and immigrant community support"
             ),
             keywords=[
                 "immigration",
@@ -159,7 +155,7 @@ class AICategorization:
         "racial_equity": CategoryDefinition(
             name="Racial Equity",
             description=(
-                "Racial justice, equity initiatives, " "and addressing systemic racism"
+                "Racial justice, equity initiatives, and addressing systemic racism"
             ),
             keywords=[
                 "racial",
@@ -178,8 +174,7 @@ class AICategorization:
         "healthcare": CategoryDefinition(
             name="Healthcare",
             description=(
-                "Public health, medical services, mental health, "
-                "and healthcare access"
+                "Public health, medical services, mental health, and healthcare access"
             ),
             keywords=[
                 "health",
@@ -196,7 +191,7 @@ class AICategorization:
         "social_services": CategoryDefinition(
             name="Social Services",
             description=(
-                "Human services, welfare, homelessness, " "and social support programs"
+                "Human services, welfare, homelessness, and social support programs"
             ),
             keywords=[
                 "welfare",
@@ -227,7 +222,7 @@ class AICategorization:
         "housing": CategoryDefinition(
             name="Housing",
             description=(
-                "Housing policy, affordable housing, " "and residential development"
+                "Housing policy, affordable housing, and residential development"
             ),
             keywords=[
                 "housing",
@@ -259,7 +254,7 @@ class AICategorization:
         "historic_preservation": CategoryDefinition(
             name="Historic Preservation",
             description=(
-                "Historic districts, landmark preservation, " "and cultural heritage"
+                "Historic districts, landmark preservation, and cultural heritage"
             ),
             keywords=[
                 "historic",
@@ -276,7 +271,7 @@ class AICategorization:
         "environment": CategoryDefinition(
             name="Environment",
             description=(
-                "Environmental protection, sustainability, " "and climate action"
+                "Environmental protection, sustainability, and climate action"
             ),
             keywords=[
                 "environment",
@@ -292,9 +287,7 @@ class AICategorization:
         ),
         "parks_recreation": CategoryDefinition(
             name="Parks & Recreation",
-            description=(
-                "Public parks, recreational facilities, " "and outdoor spaces"
-            ),
+            description=("Public parks, recreational facilities, and outdoor spaces"),
             keywords=[
                 "parks",
                 "recreation",
@@ -340,7 +333,7 @@ class AICategorization:
         "small_business": CategoryDefinition(
             name="Small Business",
             description=(
-                "Small business support, entrepreneurship, " "and local commerce"
+                "Small business support, entrepreneurship, and local commerce"
             ),
             keywords=[
                 "small business",
@@ -458,7 +451,7 @@ class AICategorization:
         "infrastructure": CategoryDefinition(
             name="Infrastructure",
             description=(
-                "Public infrastructure, maintenance, " "and capital improvements"
+                "Public infrastructure, maintenance, and capital improvements"
             ),
             keywords=[
                 "infrastructure",
@@ -490,7 +483,7 @@ class AICategorization:
         "emergency_management": CategoryDefinition(
             name="Emergency Management",
             description=(
-                "Disaster preparedness, emergency response, " "and crisis management"
+                "Disaster preparedness, emergency response, and crisis management"
             ),
             keywords=[
                 "emergency",
@@ -539,7 +532,7 @@ class AICategorization:
             self.openai_client = OpenAI(api_key=api_key)
 
     @classmethod
-    def get_category_definitions(cls) -> Dict[str, CategoryDefinition]:
+    def get_category_definitions(cls) -> dict[str, CategoryDefinition]:
         """Get all category definitions"""
         return cls.SOCIAL_ISSUE_CATEGORIES
 
@@ -547,7 +540,7 @@ class AICategorization:
     def initialize_categories_in_db(cls, db: Session) -> None:
         """Initialize category definitions in the database"""
         try:
-            for category_id, category_def in cls.SOCIAL_ISSUE_CATEGORIES.items():
+            for _category_id, category_def in cls.SOCIAL_ISSUE_CATEGORIES.items():
                 # Check if category already exists
                 existing_category = (
                     db.query(MeetingCategory)
@@ -605,7 +598,7 @@ class AICategorization:
 
     def categorize_content_with_ai(
         self, content: str
-    ) -> Tuple[List[str], List[str], str, str, List[VotingRecord], Dict[str, int]]:
+    ) -> tuple[list[str], list[str], str, str, list[VotingRecord], dict[str, int]]:
         """Use OpenAI to categorize content and extract enhanced information"""
         if not self.openai_client:
             logger.warning(
@@ -728,13 +721,13 @@ class AICategorization:
 
     def _fallback_categorization(
         self, content: str
-    ) -> Tuple[List[str], List[str], str]:
+    ) -> tuple[list[str], list[str], str]:
         """Fallback categorization using keyword matching"""
         content_lower = content.lower()
         matched_categories = []
         all_keywords = []
 
-        for category_id, category_def in self.SOCIAL_ISSUE_CATEGORIES.items():
+        for _category_id, category_def in self.SOCIAL_ISSUE_CATEGORIES.items():
             category_matches = 0
             for keyword in category_def.keywords:
                 if keyword.lower() in content_lower:
@@ -751,74 +744,7 @@ class AICategorization:
 
         return matched_categories, list(set(all_keywords)), summary
 
-    def process_meeting_minutes(
-        self, pdf_content: bytes, meeting_id: int, db: Session
-    ) -> ProcessedMeetingContent:
-        """Process meeting minutes PDF and extract categorized information"""
-        try:
-            # Extract text from PDF
-            text_content = self.extract_text_from_pdf(pdf_content)
-
-            if not text_content.strip():
-                logger.warning(f"No text extracted from PDF for meeting {meeting_id}")
-                return ProcessedMeetingContent(
-                    summary="No content could be extracted from the PDF",
-                    categories=[],
-                    keywords=[],
-                    agenda_items=[],
-                    impact_assessment="Unable to assess impact - no content extracted",
-                    key_decisions=[],
-                    public_comments=[],
-                    detailed_summary="",
-                    voting_records=[],
-                    vote_statistics={},
-                    image_paths=[],
-                )
-
-            # Categorize content with enhanced AI processing
-            (
-                categories,
-                keywords,
-                summary,
-                detailed_summary,
-                voting_records,
-                vote_statistics,
-            ) = self.categorize_content_with_ai(text_content)
-
-            # Extract agenda items (this could be enhanced
-            # with more sophisticated parsing)
-            agenda_items = self._extract_agenda_items(text_content)
-
-            # Generate impact assessment
-            impact_assessment = self._generate_impact_assessment(
-                text_content, categories
-            )
-
-            # Extract key decisions
-            key_decisions = self._extract_key_decisions(text_content)
-
-            # Extract public comments
-            public_comments = self._extract_public_comments(text_content)
-
-            return ProcessedMeetingContent(
-                summary=summary,
-                categories=categories,
-                keywords=keywords,
-                agenda_items=agenda_items,
-                impact_assessment=impact_assessment,
-                key_decisions=key_decisions,
-                public_comments=public_comments,
-                detailed_summary=detailed_summary,
-                voting_records=voting_records,
-                vote_statistics=vote_statistics,
-                image_paths=[],  # Placeholder, will be populated later
-            )
-
-        except Exception as e:
-            logger.error(f"Error processing meeting minutes: {str(e)}")
-            raise
-
-    def _extract_agenda_items(self, content: str) -> List[Dict]:
+    def _extract_agenda_items(self, content: str) -> list[dict]:
         """Extract agenda items from meeting content using enhanced pattern matching"""
         import re
 
@@ -915,7 +841,7 @@ class AICategorization:
 
         return agenda_items[:30]  # Increased limit
 
-    def _generate_impact_assessment(self, content: str, categories: List[str]) -> str:
+    def _generate_impact_assessment(self, content: str, categories: list[str]) -> str:
         """Generate impact assessment based on content and categories"""
         if not categories:
             return "No specific community impact identified."
@@ -940,7 +866,7 @@ class AICategorization:
             else "Community impact assessment pending further analysis."
         )
 
-    def _extract_key_decisions(self, content: str) -> List[str]:
+    def _extract_key_decisions(self, content: str) -> list[str]:
         """Extract key decisions from meeting content"""
         decisions = []
 
@@ -964,7 +890,7 @@ class AICategorization:
 
         return decisions[:10]  # Limit to 10 decisions
 
-    def _extract_public_comments(self, content: str) -> List[str]:
+    def _extract_public_comments(self, content: str) -> list[str]:
         """Extract public comments from meeting content"""
         comments = []
 
@@ -1006,15 +932,10 @@ class AICategorization:
 
     def _get_image_paths_from_disk(
         self, meeting_date: datetime.datetime, pdf_filename: str
-    ) -> List[str]:
-        """Get image URLs using the MeetingImageService (S3 in production, local API in dev)."""
-        from app.core.config import settings
-        from app.services.s3_service import MeetingImageService
-
-        # Standardize filename for folder name
+    ) -> list[str]:
+        """Get image URLs served by the local meeting-images API."""
         folder_name = self._standardize_filename_for_path(pdf_filename)
 
-        # Construct the expected directory path
         year = meeting_date.year
         month = meeting_date.month
         day = meeting_date.day
@@ -1022,13 +943,14 @@ class AICategorization:
         base_dir = Path("backend/storage/meeting-images")
         meeting_dir = base_dir / str(year) / f"{month:02d}" / f"{day:02d}" / folder_name
 
-        # Use MeetingImageService to get appropriate URLs
-        image_service = MeetingImageService(settings)
-        meeting_date_str = f"{year}-{month:02d}-{day:02d}"
+        if not meeting_dir.exists():
+            return []
 
-        return image_service.get_image_urls(
-            meeting_date_str, folder_name, str(meeting_dir)
-        )
+        relative_path = meeting_dir.relative_to(base_dir)
+        return [
+            f"/api/v1/meeting-images/{relative_path}/{image_file.name}"
+            for image_file in sorted(meeting_dir.glob("*.png"))
+        ]
 
     def _load_image_as_base64(self, image_path: str) -> str:
         """Load an image from disk and convert to base64 for OpenAI Vision"""
@@ -1067,7 +989,7 @@ class AICategorization:
         db: Session,
         meeting_title: str = "",
         pdf_filename: str = "",
-    ) -> List[str]:
+    ) -> list[str]:
         """Convert PDF to images and return image paths.
         If images already exist for this meeting, load them from disk instead."""
 
@@ -1144,7 +1066,7 @@ class AICategorization:
             )
 
     def _process_with_vision(
-        self, image_paths: List[str], meeting_title: str
+        self, image_paths: list[str], meeting_title: str
     ) -> ProcessedMeetingContent:
         """Process meeting using OpenAI Vision API with multiple images"""
         try:

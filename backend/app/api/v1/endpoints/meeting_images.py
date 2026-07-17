@@ -6,12 +6,10 @@ from fastapi.responses import FileResponse
 
 router = APIRouter()
 
-# NOTE: This endpoint is primarily for backward compatibility.
-# New meeting images are served directly from GitHub raw URLs.
-# Base directory for meeting images - use absolute path
+# Resolved relative to the backend working directory unless overridden.
 IMAGES_BASE_DIR = Path(
-    "/Users/kailin/Desktop/CityCamp_AI/backend/storage/meeting-images"
-)
+    os.environ.get("MEETING_IMAGES_DIR", "storage/meeting-images")
+).resolve()
 
 
 @router.get("/{year}/{month}/{day}/{meeting_folder}/{image_name}")
@@ -40,4 +38,6 @@ async def get_meeting_image(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error serving image: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error serving image: {str(e)}"
+        ) from e
