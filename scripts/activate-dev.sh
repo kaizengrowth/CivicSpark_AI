@@ -2,7 +2,7 @@
 # Development Environment Activation Script
 # Usage: source scripts/activate-dev.sh
 
-echo "Setting up CityCamp AI development environment..."
+echo "Setting up CivicSpark AI development environment..."
 
 # Navigate to project root if not already there
 if [[ ! -f "backend/venv/bin/activate" ]]; then
@@ -21,7 +21,7 @@ echo "PYTHONPATH configured"
 # Set environment variables
 export NODE_ENV=development
 # Use local database for development
-export DATABASE_URL="postgresql://user:password@localhost:5435/citycamp_db"
+export DATABASE_URL="postgresql://user:password@localhost:5432/civicspark_db"
 export REDIS_URL="redis://localhost:6382/0"
 
 echo ""

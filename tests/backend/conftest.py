@@ -20,8 +20,8 @@ if "GITHUB_ACTIONS" in os.environ:
     TEST_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/test_db"
 else:
     # Local development environment
-    os.environ["DATABASE_URL"] = "postgresql://user:password@localhost:5435/citycamp_db"
-    TEST_DATABASE_URL = "postgresql://user:password@localhost:5435/citycamp_db"
+    os.environ["DATABASE_URL"] = "postgresql://user:password@localhost:5432/civicspark_db"
+    TEST_DATABASE_URL = "postgresql://user:password@localhost:5432/civicspark_db"
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Bulk ingest documents into the database and vector store (RAG) for CityCamp AI.
+Bulk ingest documents into the database and vector store (RAG) for CivicSpark AI.
 
 Usage examples:
   python scripts/ingest_documents.py --path /path/to/folder --type policy --category housing --uploaded-by 1

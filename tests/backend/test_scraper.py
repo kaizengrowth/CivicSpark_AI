@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script for the CityCamp AI scraper
+Test script for the CivicSpark AI scraper
 """
 
 import pytest

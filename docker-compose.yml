@@ -1,150 +1,60 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
-    container_name: citycamp_postgres
+    image: pgvector/pgvector:pg16
+    container_name: civicspark_postgres
     environment:
-      POSTGRES_DB: citycamp_db
+      POSTGRES_DB: civicspark_db
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
     ports:
-      - "5435:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - citycamp_network
+      - civicspark_network
 
-  # Redis for Celery
-  redis:
-    image: redis:7-alpine
-    container_name: citycamp_redis
-    ports:
-      - "6382:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - citycamp_network
-
-  # Backend API
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: citycamp_backend
+    container_name: civicspark_backend
     environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/citycamp_db
-      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://user:password@postgres:5432/civicspark_db
       - SECRET_KEY=your-secret-key-for-development
       - ENVIRONMENT=development
       - DEBUG=True
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     ports:
-      - "8002:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
       - ./data:/app/data
       - /app/venv
     depends_on:
       - postgres
-      - redis
     networks:
-      - citycamp_network
+      - civicspark_network
     restart: unless-stopped
 
-  # Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: citycamp_frontend
+    container_name: civicspark_frontend
     ports:
-      - "3002:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     depends_on:
       - backend
     networks:
-      - citycamp_network
-    restart: unless-stopped
-
-  # Celery Worker
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: citycamp_celery_worker
-    command: celery -A app.celery worker --loglevel=info
-    environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/citycamp_db
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=your-secret-key-for-development
-      - ENVIRONMENT=development
-      - DEBUG=True
-    volumes:
-      - ./backend:/app
-      - /app/venv
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - citycamp_network
-    restart: unless-stopped
-
-  # Celery Beat (Scheduler)
-  celery_beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: citycamp_celery_beat
-    command: celery -A app.celery beat --loglevel=info
-    environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/citycamp_db
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=your-secret-key-for-development
-      - ENVIRONMENT=development
-      - DEBUG=True
-    volumes:
-      - ./backend:/app
-      - /app/venv
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - citycamp_network
-    restart: unless-stopped
-
-  # Celery Flower (Monitoring)
-  celery_flower:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: citycamp_celery_flower
-    command: celery -A app.celery flower --port=5555
-    environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/citycamp_db
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=your-secret-key-for-development
-      - ENVIRONMENT=development
-      - DEBUG=True
-    ports:
-      - "5557:5555"
-    volumes:
-      - ./backend:/app
-      - /app/venv
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - citycamp_network
+      - civicspark_network
     restart: unless-stopped
 
 volumes:
   postgres_data:
-  redis_data:
 
 networks:
-  citycamp_network:
+  civicspark_network:
     driver: bridge

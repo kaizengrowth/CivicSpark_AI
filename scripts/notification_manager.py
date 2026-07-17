@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Notification Management CLI Script for CityCamp AI
+Notification Management CLI Script for CivicSpark AI
 
 This script provides command-line utilities for managing the notification system:
 - Initialize default meeting topics
@@ -239,7 +239,7 @@ def check_twilio_config():
 async def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
-        description="CityCamp AI Notification Management CLI",
+        description="CivicSpark AI Notification Management CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -264,7 +264,7 @@ Examples:
 
     args = parser.parse_args()
 
-    print(f"🚀 CityCamp AI Notification Manager")
+    print(f"🚀 CivicSpark AI Notification Manager")
     print(f"   Command: {args.command}")
     print(f"   Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 50)

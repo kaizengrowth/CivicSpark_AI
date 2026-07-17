@@ -12,34 +12,22 @@ repos:
       - id: check-added-large-files
       - id: mixed-line-ending
 
-  # Python hooks
-  - repo: https://github.com/psf/black
-    rev: 24.4.2
+  # Python: ruff replaces black + flake8 + isort
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.5
     hooks:
-      - id: black
-        language_version: python3
+      - id: ruff
+        files: ^backend/
+        args: [--fix]
+      - id: ruff-format
         files: ^backend/
 
-  # - repo: https://github.com/pycqa/flake8
-  #   rev: 6.1.0
-  #   hooks:
-  #     - id: flake8
-  #       files: ^backend/
-  #       args: ["--max-line-length=88", "--extend-ignore=E203,W503"]
-
-  - repo: https://github.com/pycqa/isort
-    rev: 5.12.0
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.1
     hooks:
-      - id: isort
-        files: ^backend/
-        args: [--profile=black]
-
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.7.0
-  #   hooks:
-  #     - id: mypy
-  #       files: ^backend/
-  #       additional_dependencies: [types-requests]
+      - id: mypy
+        files: ^backend/app/(api|services)/
+        additional_dependencies: [types-requests, pydantic]
 
   # Frontend hooks
   - repo: https://github.com/pre-commit/mirrors-eslint
@@ -60,9 +48,7 @@ repos:
         files: ^backend/
         args: [--skip=B101,B601]
 
-  # Commit message
-  - repo: https://github.com/commitizen-tools/commitizen
-    rev: v3.12.0
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
     hooks:
-      - id: commitizen
-        stages: [commit-msg]
+      - id: gitleaks

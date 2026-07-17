@@ -4,7 +4,7 @@
 
 set -e  # Exit on error
 
-echo "Starting CityCamp AI Development Environment..."
+echo "Starting CivicSpark AI Development Environment..."
 echo "=================================================="
 
 # Navigate to project root
@@ -35,7 +35,7 @@ echo "Virtual environment active: $(which python)"
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/backend"
 export NODE_ENV=development
 # Point backend to Docker Postgres (dev)
-export DATABASE_URL="postgresql://user:password@localhost:5435/citycamp_db"
+export DATABASE_URL="postgresql://user:password@localhost:5432/civicspark_db"
 
 # Create .env if it doesn't exist
 if [[ ! -f "backend/.env" ]]; then

@@ -25,7 +25,7 @@ def test_config():
         from app.core.config import settings
         assert settings is not None
         assert hasattr(settings, 'project_name')
-        assert settings.project_name == "CityCamp AI"
+        assert settings.project_name == "CivicSpark AI"
     except ImportError as e:
         pytest.skip(f"Could not import config: {e}")
 
