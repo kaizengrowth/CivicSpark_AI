@@ -28,7 +28,6 @@ class User(Base):
     last_login = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    notifications = relationship("Notification", back_populates="user")
     campaigns = relationship("Campaign", back_populates="creator")
     campaign_memberships = relationship("CampaignMembership", back_populates="user")
     notification_preferences = relationship(

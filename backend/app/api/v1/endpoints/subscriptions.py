@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.notification_preferences import NotificationPreferences
-from app.models.subscription import MeetingTopic, TopicSubscription
+from app.models.subscription import MeetingTopic
 from app.schemas.notification_preferences import (
     NotificationPreferencesCreate,
     NotificationPreferencesResponse,
@@ -47,32 +47,19 @@ async def create_topic_subscription(
 ):
     """Create a new topic-based notification subscription"""
 
-    # Check if email already exists in new notification preferences table
     existing = (
         db.query(NotificationPreferences)
         .filter(NotificationPreferences.email == subscription_data.email)
         .first()
     )
 
-    # Also check legacy table for backward compatibility during migration
-    legacy_existing = (
-        db.query(TopicSubscription)
-        .filter(TopicSubscription.email == subscription_data.email)
-        .first()
-    )
-
-    if existing or legacy_existing:
-        if existing and existing.is_active:
+    if existing:
+        if existing.is_active:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email address is already subscribed. Use the update endpoint to modify preferences.",
             )
-        elif legacy_existing and legacy_existing.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email address is already subscribed. Use the update endpoint to modify preferences.",
-            )
-        elif existing and not existing.is_active:
+        else:
             # Reactivate existing subscription
             for field, value in subscription_data.model_dump().items():
                 if hasattr(existing, field):
@@ -186,8 +173,8 @@ async def update_subscription(
     """Update subscription preferences"""
 
     subscription = (
-        db.query(TopicSubscription)
-        .filter(TopicSubscription.id == subscription_id)
+        db.query(NotificationPreferences)
+        .filter(NotificationPreferences.id == subscription_id)
         .first()
     )
 
@@ -216,10 +203,10 @@ async def confirm_subscription(
     """Confirm email subscription with verification token"""
 
     subscription = (
-        db.query(TopicSubscription)
+        db.query(NotificationPreferences)
         .filter(
-            TopicSubscription.email == confirm_data.email,
-            TopicSubscription.email_verification_token
+            NotificationPreferences.email == confirm_data.email,
+            NotificationPreferences.email_verification_token
             == confirm_data.verification_token,
         )
         .first()
@@ -231,14 +218,13 @@ async def confirm_subscription(
             detail="Invalid email or verification token",
         )
 
-    if subscription.confirmed:
+    if subscription.email_verified:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Subscription already confirmed",
         )
 
-    subscription.confirmed = True
-    subscription.confirmed_at = datetime.utcnow()
+    subscription.email_verified = True
     subscription.email_verification_token = None  # Clear token after use
 
     db.commit()
@@ -255,8 +241,8 @@ async def unsubscribe(subscription_id: int, db: Session = Depends(get_db)):
     """Unsubscribe from notifications"""
 
     subscription = (
-        db.query(TopicSubscription)
-        .filter(TopicSubscription.id == subscription_id)
+        db.query(NotificationPreferences)
+        .filter(NotificationPreferences.id == subscription_id)
         .first()
     )
 
@@ -285,34 +271,37 @@ async def get_subscription_stats(db: Session = Depends(get_db)):
     # TODO: Add admin authentication check
 
     # Basic counts
-    total_subscriptions = db.query(TopicSubscription).count()
+    total_subscriptions = db.query(NotificationPreferences).count()
     active_subscriptions = (
-        db.query(TopicSubscription).filter(TopicSubscription.is_active == True).count()
+        db.query(NotificationPreferences)
+        .filter(NotificationPreferences.is_active == True)
+        .count()
     )
     confirmed_subscriptions = (
-        db.query(TopicSubscription)
+        db.query(NotificationPreferences)
         .filter(
-            TopicSubscription.confirmed == True, TopicSubscription.is_active == True
+            NotificationPreferences.email_verified == True,
+            NotificationPreferences.is_active == True,
         )
         .count()
     )
 
     # Notification type counts
     sms_subscribers = (
-        db.query(TopicSubscription)
+        db.query(NotificationPreferences)
         .filter(
-            TopicSubscription.sms_notifications == True,
-            TopicSubscription.is_active == True,
-            TopicSubscription.phone_number.isnot(None),
+            NotificationPreferences.sms_notifications == True,
+            NotificationPreferences.is_active == True,
+            NotificationPreferences.phone_number.isnot(None),
         )
         .count()
     )
 
     email_subscribers = (
-        db.query(TopicSubscription)
+        db.query(NotificationPreferences)
         .filter(
-            TopicSubscription.email_notifications == True,
-            TopicSubscription.is_active == True,
+            NotificationPreferences.email_notifications == True,
+            NotificationPreferences.is_active == True,
         )
         .count()
     )
@@ -320,8 +309,8 @@ async def get_subscription_stats(db: Session = Depends(get_db)):
     # Recent signups (last 30 days)
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     recent_signups = (
-        db.query(TopicSubscription)
-        .filter(TopicSubscription.created_at >= thirty_days_ago)
+        db.query(NotificationPreferences)
+        .filter(NotificationPreferences.created_at >= thirty_days_ago)
         .count()
     )
 

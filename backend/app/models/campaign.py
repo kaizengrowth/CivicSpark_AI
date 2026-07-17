@@ -75,7 +75,6 @@ class Campaign(Base):
     memberships = relationship("CampaignMembership", back_populates="campaign")
     updates = relationship("CampaignUpdate", back_populates="campaign")
     signatures = relationship("CampaignSignature", back_populates="campaign")
-    notifications = relationship("Notification", back_populates="campaign")
 
 
 class CampaignMembership(Base):

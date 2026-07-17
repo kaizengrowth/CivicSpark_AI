@@ -29,7 +29,6 @@ from datetime import datetime
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal
-from app.models.subscription import TopicSubscription
 from app.models.notification_preferences import NotificationPreferences
 from app.services.notification_service import NotificationService
 
@@ -109,8 +108,8 @@ async def test_notification(email: str, test_message: str = None):
         # Fallback to legacy table if not found in new table
         if not subscription:
             subscription = (
-                db.query(TopicSubscription)
-                .filter(TopicSubscription.email == email, TopicSubscription.is_active == True)
+                db.query(NotificationPreferences)
+                .filter(NotificationPreferences.email == email, NotificationPreferences.is_active == True)
                 .first()
             )
 
@@ -157,16 +156,16 @@ def show_stats():
         ).count()
 
         # Get stats from legacy table for comparison
-        legacy_total = db.query(TopicSubscription).count()
-        legacy_active = db.query(TopicSubscription).filter(TopicSubscription.is_active == True).count()
-        legacy_confirmed = db.query(TopicSubscription).filter(
-            TopicSubscription.is_active == True,
-            TopicSubscription.confirmed == True
+        legacy_total = db.query(NotificationPreferences).count()
+        legacy_active = db.query(NotificationPreferences).filter(NotificationPreferences.is_active == True).count()
+        legacy_confirmed = db.query(NotificationPreferences).filter(
+            NotificationPreferences.is_active == True,
+            NotificationPreferences.email_verified == True
         ).count()
-        legacy_sms_enabled = db.query(TopicSubscription).filter(
-            TopicSubscription.is_active == True,
-            TopicSubscription.sms_notifications == True,
-            TopicSubscription.phone_number.isnot(None)
+        legacy_sms_enabled = db.query(NotificationPreferences).filter(
+            NotificationPreferences.is_active == True,
+            NotificationPreferences.sms_notifications == True,
+            NotificationPreferences.phone_number.isnot(None)
         ).count()
 
         # Combined totals

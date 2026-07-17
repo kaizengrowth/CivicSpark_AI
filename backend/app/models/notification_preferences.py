@@ -66,6 +66,17 @@ class NotificationPreferences(Base):
     # Relationships
     user = relationship("User", back_populates="notification_preferences")
 
+    @property
+    def confirmed(self) -> bool:
+        """Legacy-compatible view over per-channel verification."""
+        return bool(self.email_verified or self.phone_verified)
+
+    @property
+    def confirmed_at(self):
+        """Kept for response-schema compatibility; the unified model
+        tracks per-channel verification, not a single timestamp."""
+        return None
+
     def __repr__(self):
         owner = f"user_id={self.user_id}" if self.user_id else f"email={self.email}"
         return f"<NotificationPreferences({owner})>"

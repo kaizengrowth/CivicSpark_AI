@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.models.meeting import Meeting
 from app.models.notification_preferences import NotificationPreferences
-from app.models.subscription import MeetingTopic, TopicSubscription
+from app.models.subscription import MeetingTopic
 from app.services.base import BaseService
 from app.services.twilio_service import TwilioService
 
@@ -250,7 +250,7 @@ class NotificationService(BaseService):
 
         return existing_notification is not None
 
-    def _is_in_quiet_hours(self, subscription: TopicSubscription) -> bool:
+    def _is_in_quiet_hours(self, subscription: NotificationPreferences) -> bool:
         """
         Check if current time is within subscriber's quiet hours
         """
@@ -283,8 +283,8 @@ class NotificationService(BaseService):
         """
         try:
             subscription = (
-                db.query(TopicSubscription)
-                .filter(TopicSubscription.id == subscription_id)
+                db.query(NotificationPreferences)
+                .filter(NotificationPreferences.id == subscription_id)
                 .first()
             )
 
@@ -306,8 +306,8 @@ class NotificationService(BaseService):
         Send a test notification to a specific subscriber
         """
         subscription = (
-            db.query(TopicSubscription)
-            .filter(TopicSubscription.id == subscription_id)
+            db.query(NotificationPreferences)
+            .filter(NotificationPreferences.id == subscription_id)
             .first()
         )
 
@@ -346,8 +346,8 @@ class NotificationService(BaseService):
         """
         meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
         subscription = (
-            db.query(TopicSubscription)
-            .filter(TopicSubscription.id == subscription_id)
+            db.query(NotificationPreferences)
+            .filter(NotificationPreferences.id == subscription_id)
             .first()
         )
 

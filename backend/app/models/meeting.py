@@ -65,7 +65,6 @@ class Meeting(Base):
 
     # Relationships
     agenda_items = relationship("AgendaItem", back_populates="meeting")
-    notifications = relationship("Notification", back_populates="meeting")
 
 
 class AgendaItem(Base):
