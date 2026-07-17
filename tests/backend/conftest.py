@@ -2,10 +2,11 @@
 Pytest configuration for backend tests
 """
 
-import pytest
-import sys
 import os
+import sys
 from pathlib import Path
+
+import pytest
 
 # Add the backend directory to Python path
 backend_path = Path(__file__).parent.parent.parent / "backend"
@@ -20,16 +21,20 @@ if "GITHUB_ACTIONS" in os.environ:
     TEST_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/test_db"
 else:
     # Local development environment
-    os.environ["DATABASE_URL"] = "postgresql://user:password@localhost:5432/civicspark_db"
+    os.environ["DATABASE_URL"] = (
+        "postgresql://user:password@localhost:5432/civicspark_db"
+    )
     TEST_DATABASE_URL = "postgresql://user:password@localhost:5432/civicspark_db"
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from app.core.database import Base
 
 # Test database configuration
 engine = create_engine(TEST_DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 @pytest.fixture(scope="session")
 def db_engine():
@@ -39,6 +44,7 @@ def db_engine():
     yield engine
     # Clean up test database tables
     Base.metadata.drop_all(bind=engine)
+
 
 @pytest.fixture
 def db_session(db_engine):

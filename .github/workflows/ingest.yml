@@ -1,0 +1,55 @@
+name: Nightly Tulsa Ingest
+
+# Triggers the token-protected ingestion endpoint on the Render
+# backend. Free-tier Render web services sleep, so the first request
+# may cold-start: retry with backoff before giving up.
+
+on:
+  schedule:
+    - cron: '30 8 * * *'   # 03:30 America/Chicago
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Source system'
+        default: 'granicus'
+        type: choice
+        options: [granicus, archive]
+
+jobs:
+  trigger-ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger ingestion
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL || 'https://civicspark-api.onrender.com' }}
+          INGEST_API_TOKEN: ${{ secrets.INGEST_API_TOKEN }}
+          SOURCE: ${{ inputs.source || 'granicus' }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            status=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
+              -X POST "$BACKEND_URL/api/v1/ingest/run" \
+              -H "Content-Type: application/json" \
+              -H "X-Ingest-Token: $INGEST_API_TOKEN" \
+              -d "{\"source\": \"$SOURCE\"}" \
+              --max-time 120 || echo "000")
+            echo "attempt $attempt -> HTTP $status"
+            cat /tmp/resp.json || true
+            if [ "$status" = "200" ]; then
+              exit 0
+            fi
+            sleep $((attempt * 30))
+          done
+          echo "Failed to trigger ingestion after 5 attempts"
+          exit 1
+
+      - name: Verify run recorded
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL || 'https://civicspark-api.onrender.com' }}
+        run: |
+          sleep 60
+          curl -sf "$BACKEND_URL/api/v1/ingest/status" | tee /tmp/status.json
+          python3 -c "
+          import json
+          status = json.load(open('/tmp/status.json'))
+          assert not status['is_stale'], 'ingestion still stale after run'
+          "

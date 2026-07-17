@@ -1,4 +1,3 @@
-import pytest
 import sys
 from pathlib import Path
 
@@ -7,9 +6,11 @@ backend_path = Path(__file__).parent.parent.parent / "backend"
 sys.path.insert(0, str(backend_path))
 
 from fastapi.testclient import TestClient
+
 from app.main import app
 
 client = TestClient(app)
+
 
 def test_health_check():
     """Test the health check endpoint."""
@@ -21,6 +22,7 @@ def test_health_check():
     assert "version" in data
     assert "environment" in data
 
+
 def test_root_endpoint():
     """Test the root endpoint."""
     response = client.get("/")
@@ -28,6 +30,7 @@ def test_root_endpoint():
     data = response.json()
     assert "message" in data
     assert "CivicSpark AI" in data["message"]
+
 
 def test_api_v1_meetings_endpoint():
     """Test the API v1 meetings endpoint."""
@@ -41,6 +44,7 @@ def test_api_v1_meetings_endpoint():
         # If there's an exception, the endpoint still exists
         # We just can't test it properly without database setup
         pass
+
 
 def test_api_v1_auth_endpoint():
     """Test the API v1 auth endpoint."""

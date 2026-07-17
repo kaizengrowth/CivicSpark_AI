@@ -5,11 +5,11 @@ from .endpoints import (
     campaigns,
     chatbot,
     documents,
+    ingest,
     meeting_images,
     meetings,
     organizations,
     representatives,
-    scraper,
     search,
     subscriptions,
 )
@@ -23,7 +23,7 @@ api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(
     meeting_images.router, prefix="/meeting-images", tags=["meeting-images"]
 )
-api_router.include_router(scraper.router, prefix="/scraper", tags=["scraper"])
+api_router.include_router(ingest.router, prefix="/ingest", tags=["ingest"])
 api_router.include_router(chatbot.router, prefix="/chatbot", tags=["chatbot"])
 api_router.include_router(
     subscriptions.router, prefix="/subscriptions", tags=["subscriptions"]
