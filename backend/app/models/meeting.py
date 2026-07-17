@@ -4,10 +4,12 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -34,7 +36,11 @@ class Meeting(Base):
 
     # Meeting metadata
     external_id = Column(String, nullable=True)  # ID from external system
-    source = Column(String, nullable=False)  # e.g., "tulsa_city_council_api"
+    source = Column(String, nullable=False)  # e.g., "granicus"
+    body = Column(
+        String(200), nullable=True
+    )  # Deliberative body, e.g. "City Council", "Public Works Committee"
+    last_ingested_at = Column(DateTime(timezone=True), nullable=True)
 
     # Document categorization
     document_type = Column(String, nullable=True)  # "agenda" or "minutes"
@@ -80,6 +86,19 @@ class AgendaItem(Base):
     summary = Column(Text, nullable=True)  # AI-generated summary
     impact_assessment = Column(Text, nullable=True)  # AI-generated impact assessment
 
+    # Evidence layer
+    topics = Column(
+        JSONB, nullable=False, default=list, server_default="[]"
+    )  # Taxonomy labels (see app/data/topic_taxonomy.json)
+    entities = Column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )  # Resolved entities: councilors, districts, ordinance numbers
+    source_page_start = Column(Integer, nullable=True)  # Page span in source PDF
+    source_page_end = Column(Integer, nullable=True)
+    item_hash = Column(
+        String(64), nullable=True, index=True
+    )  # Stable identity across re-scrapes
+
     # Voting information
     vote_required = Column(Boolean, default=False)
     vote_result = Column(String, nullable=True)  # passed, failed, postponed
@@ -94,6 +113,44 @@ class AgendaItem(Base):
 
     # Relationships
     meeting = relationship("Meeting", back_populates="agenda_items")
+
+    __table_args__ = (
+        Index("ix_agenda_items_topics", "topics", postgresql_using="gin"),
+    )
+
+
+class ScrapeRun(Base):
+    """One ingestion run against a source system.
+
+    The staleness monitor's source of truth: /ingest/status reports the
+    latest run per source, and the UI surfaces a warning when the last
+    success is older than settings.ingest_stale_after_days.
+    """
+
+    __tablename__ = "scrape_runs"
+
+    id = Column(Integer, primary_key=True)
+    source_system = Column(String(100), nullable=False, index=True)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(
+        String(20), nullable=False, default="running", server_default="running"
+    )  # running | success | partial | failed
+    meetings_found = Column(Integer, nullable=False, default=0, server_default="0")
+    documents_new = Column(Integer, nullable=False, default=0, server_default="0")
+    documents_changed = Column(Integer, nullable=False, default=0, server_default="0")
+    documents_failed = Column(Integer, nullable=False, default=0, server_default="0")
+    error = Column(Text, nullable=True)
+    triggered_by = Column(String(100), nullable=True)  # cron | manual | api
+
+    __table_args__ = (
+        Index(
+            "ix_scrape_runs_source_status_finished",
+            "source_system",
+            "status",
+            "finished_at",
+        ),
+    )
 
 
 class MeetingCategory(Base):

@@ -19,7 +19,7 @@ from app.schemas.document import (
 )
 from app.services.auth import get_current_active_user, get_current_admin_user
 from app.services.document_processing_service import DocumentProcessingService
-from app.services.vector_service import VectorService
+from app.services.search_service import SearchService
 
 router = APIRouter()
 
@@ -99,7 +99,7 @@ async def search_documents(
 ):
     """Search documents using vector similarity"""
 
-    vector_service = VectorService(settings)
+    vector_service = SearchService(db, settings)
 
     # Build filters
     filters = {}
@@ -287,7 +287,7 @@ async def delete_document(
         raise HTTPException(status_code=404, detail="Document not found")
 
     # Delete from vector store
-    vector_service = VectorService(settings)
+    vector_service = SearchService(db, settings)
     await vector_service.delete_document_chunks(document_id)
 
     # Delete file if it exists

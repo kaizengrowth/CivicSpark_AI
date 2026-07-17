@@ -36,7 +36,18 @@ def get_db():
 def create_tables():
     """
     Create database tables
+
+    The pgvector extension must exist before create_all, because model
+    columns use the Vector type. Models must be imported so
+    Base.metadata knows every table, regardless of caller.
     """
+    from sqlalchemy import text
+
+    import app.models  # noqa: F401  (registers all models on Base.metadata)
+
+    with engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.commit()
     Base.metadata.create_all(bind=engine)
 
 

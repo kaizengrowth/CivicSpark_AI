@@ -1,7 +1,6 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
-import pytz
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -53,7 +52,7 @@ class MeetingScraper:
 
                     # Scrape minutes if meeting has already occurred
                     # Use timezone-aware datetime for comparison
-                    current_time = datetime.now(pytz.UTC)
+                    current_time = datetime.now(UTC)
                     if meeting.meeting_date < current_time:
                         minutes = await self.tgov_scraper.scrape_meeting_minutes(
                             meeting

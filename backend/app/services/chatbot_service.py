@@ -9,7 +9,7 @@ from app.core.config import Settings
 from app.models.campaign import Campaign
 from app.models.meeting import Meeting
 from app.services.research_service import ResearchService
-from app.services.vector_service import VectorService
+from app.services.search_service import SearchService
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class ChatbotService:
             self.client = OpenAI(api_key=settings.openai_api_key)
 
         self.research_service = ResearchService(settings)
-        self.vector_service = VectorService(settings)
+        self.vector_service = SearchService(db, settings)
 
     def get_system_prompt(self) -> str:
         """Get the enhanced system prompt for the chatbot"""

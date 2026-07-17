@@ -18,6 +18,16 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Guard: this codebase also provisions schema via
+    # Base.metadata.create_all() at startup, so skip when the target
+    # already exists (fresh DBs get everything from create_all).
+    from sqlalchemy import inspect
+
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    if inspector.has_table("documents"):
+        return
+
     # Create documents table
     op.create_table(
         "documents",

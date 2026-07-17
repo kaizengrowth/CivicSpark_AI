@@ -18,6 +18,17 @@ depends_on = None
 
 
 def upgrade():
+    # Guard: this codebase also provisions schema via
+    # Base.metadata.create_all() at startup, so skip when the target
+    # already exists (fresh DBs get everything from create_all).
+    from sqlalchemy import inspect
+
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    cols = [c["name"] for c in inspector.get_columns("meetings")]
+    if "image_paths" in cols:
+        return
+
     # Add image_paths column to meetings table
     op.add_column(
         "meetings",

@@ -10,6 +10,7 @@ from .endpoints import (
     organizations,
     representatives,
     scraper,
+    search,
     subscriptions,
 )
 
@@ -18,6 +19,7 @@ api_router = APIRouter()
 # Include existing endpoint routers
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 api_router.include_router(meetings.router, prefix="/meetings", tags=["meetings"])
+api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(
     meeting_images.router, prefix="/meeting-images", tags=["meeting-images"]
 )

@@ -11,7 +11,7 @@ from .document import (
     DocumentCollection,
     DocumentCollectionMembership,
 )
-from .meeting import AgendaItem, Meeting, MeetingCategory
+from .meeting import AgendaItem, Meeting, MeetingCategory, ScrapeRun
 from .notification import Notification, NotificationPreference, NotificationTemplate
 from .notification_preferences import NotificationPreferences
 from .subscription import MeetingTopic, NotificationLog, TopicSubscription
@@ -23,6 +23,7 @@ __all__ = [
     "Meeting",
     "AgendaItem",
     "MeetingCategory",
+    "ScrapeRun",
     "Document",
     "DocumentChunk",
     "DocumentCollection",

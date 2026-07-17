@@ -1,14 +1,18 @@
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     Boolean,
     Column,
+    Computed,
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -56,6 +60,15 @@ class Document(Base):
     embedding_model = Column(String(100))  # Which embedding model was used
     chunk_count = Column(Integer, default=0)  # Number of chunks created
 
+    # Provenance (evidence layer)
+    content_hash = Column(String(64), index=True)  # sha256 of raw source bytes
+    retrieved_at = Column(DateTime(timezone=True))  # When the source was fetched
+    version = Column(Integer, nullable=False, default=1)
+    supersedes_id = Column(Integer, ForeignKey("documents.id"))  # Prior version
+    source_system = Column(
+        String(100)
+    )  # granicus | tulsa_council_archive | manual_upload
+
     # Content analysis
     language = Column(String(10), default="en")
     word_count = Column(Integer)
@@ -85,9 +98,21 @@ class Document(Base):
 
     # Relationships
     chunks = relationship(
-        "DocumentChunk", back_populates="document", cascade="all, delete-orphan"
+        "DocumentChunk",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        foreign_keys="DocumentChunk.document_id",
     )
     uploader = relationship("User")
+
+    __table_args__ = (
+        Index(
+            "uq_documents_source_url_content_hash",
+            "source_url",
+            "content_hash",
+            unique=True,
+        ),
+    )
 
     def __repr__(self):
         return f"<Document(title='{self.title[:50]}', type='{self.document_type}')>"
@@ -113,9 +138,17 @@ class DocumentChunk(Base):
     start_char = Column(Integer)  # Character position in original document
     end_char = Column(Integer)
 
-    # Vector embeddings (stored as JSON for now, could move to vector DB)
-    embedding_vector = Column(JSON)  # The actual embedding vector
+    # Hybrid search columns
+    embedding = Column(Vector(1536))  # Dense embedding (pgvector, cosine)
+    content_tsv = Column(
+        TSVECTOR,
+        Computed("to_tsvector('english', content)", persisted=True),
+    )
     embedding_model = Column(String(100))  # Model used for embedding
+
+    # Parent context for filter pushdown and provenance display
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), index=True)
+    agenda_item_id = Column(Integer, ForeignKey("agenda_items.id"), index=True)
 
     # Chunk analysis
     word_count = Column(Integer)
@@ -135,6 +168,21 @@ class DocumentChunk(Base):
 
     # Relationships
     document = relationship("Document", back_populates="chunks")
+
+    __table_args__ = (
+        Index(
+            "ix_document_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"m": 16, "ef_construction": 64},
+        ),
+        Index(
+            "ix_document_chunks_content_tsv",
+            "content_tsv",
+            postgresql_using="gin",
+        ),
+    )
 
     def __repr__(self):
         return f"<DocumentChunk(doc_id={self.document_id}, chunk={self.chunk_index})>"

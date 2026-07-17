@@ -35,7 +35,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.models.document import Document, DocumentChunk
-from app.services.vector_service import VectorService
+from app.services.search_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -421,7 +421,7 @@ class DocumentProcessingService:
         self.settings = settings
         self.db = db
         self.processor = DocumentProcessor(settings)
-        self.vector_service = VectorService(settings)
+        self.embedding_service = EmbeddingService(settings)
 
     async def process_document(
         self, file_path: str, document_data: dict[str, Any]
@@ -478,9 +478,18 @@ class DocumentProcessingService:
             # Chunk the text
             chunks_data = self.processor.chunk_text(cleaned_text)
 
-            # Create chunk records and prepare for vector store
-            chunks_for_vector = []
-            for chunk_data in chunks_data:
+            # Embed all chunks in one batch; embeddings live on the rows
+            embeddings = await self.embedding_service.generate_embeddings(
+                [chunk_data["content"] for chunk_data in chunks_data]
+            )
+            if embeddings and len(embeddings) != len(chunks_data):
+                logger.error(
+                    f"Embedding count mismatch for document {document.id}: "
+                    f"{len(embeddings)} != {len(chunks_data)}"
+                )
+                embeddings = []
+
+            for i, chunk_data in enumerate(chunks_data):
                 chunk = DocumentChunk(
                     document_id=document.id,
                     content=chunk_data["content"],
@@ -488,38 +497,23 @@ class DocumentProcessingService:
                     word_count=chunk_data["word_count"],
                     start_char=chunk_data["start_char"],
                     end_char=chunk_data["end_char"],
-                    embedding_model="text-embedding-3-small",
+                    embedding=embeddings[i] if embeddings else None,
+                    embedding_model=(
+                        self.settings.embedding_model if embeddings else None
+                    ),
                 )
-
                 self.db.add(chunk)
-
-                # Prepare for vector store
-                chunks_for_vector.append(
-                    {
-                        "document_id": document.id,
-                        "chunk_index": chunk_data["chunk_index"],
-                        "content": chunk_data["content"],
-                        "document_type": document.document_type,
-                        "category": document.category,
-                        "word_count": chunk_data["word_count"],
-                    }
-                )
 
             # Update document with chunk count
             document.chunk_count = len(chunks_data)
             document.processing_status = "completed"
             document.is_processed = True
+            if not embeddings:
+                # Keyword search still works via the tsvector column;
+                # flag the gap so a backfill can find it.
+                document.processing_error = "embeddings_pending"
 
             self.db.commit()
-
-            # Add to vector store
-            success = await self.vector_service.add_document_chunks(chunks_for_vector)
-
-            if not success:
-                logger.error(f"Failed to add document {document.id} to vector store")
-                document.processing_status = "failed"
-                document.processing_error = "Failed to add to vector store"
-                self.db.commit()
 
             return document
 
@@ -547,9 +541,6 @@ class DocumentProcessingService:
             self.db.query(DocumentChunk).filter(
                 DocumentChunk.document_id == document_id
             ).delete()
-
-            # Delete from vector store
-            await self.vector_service.delete_document_chunks(document_id)
 
             # Reprocess
             if document.file_path and os.path.exists(document.file_path):
