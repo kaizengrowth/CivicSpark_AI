@@ -18,15 +18,9 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "baseUrl": ".",
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"],
     "paths": {
-      "@/*": ["src/*"],
-      "@/components/*": ["src/components/*"],
-      "@/pages/*": ["src/pages/*"],
-      "@/services/*": ["src/services/*"],
-      "@/utils/*": ["src/utils/*"],
-      "@/types/*": ["src/types/*"],
-      "@/hooks/*": ["src/hooks/*"],
-      "@/assets/*": ["src/assets/*"]
+      "@/*": ["src/*"]
     }
   },
   "include": [

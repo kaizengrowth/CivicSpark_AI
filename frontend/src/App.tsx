@@ -18,6 +18,7 @@ import { ContactRepresentativesLayoutPage } from './pages/ContactRepresentatives
 import { ProfilePage } from './pages/ProfilePage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { NotificationSignupPage } from './pages/NotificationSignupPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 
 function App() {
   return (
@@ -52,6 +53,9 @@ function App() {
                   <NotificationsPage />
                 </ProtectedRoute>
               } />
+
+              {/* Catch-all */}
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>
 

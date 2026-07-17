@@ -127,7 +127,7 @@ export const MeetingsPage: React.FC = () => {
       console.error('API error - falling back to sample data:', {
         error: err,
         errorMessage: err instanceof Error ? err.message : 'Unknown error',
-        environment: process.env.NODE_ENV,
+        environment: import.meta.env.MODE,
         url: window.location.href
       });
 
@@ -184,10 +184,10 @@ export const MeetingsPage: React.FC = () => {
       meeting.agenda_items = response.agenda_items || [];
       // Prefer backend proxy URL for PDFs to avoid CORS and path issues
       if (response.pdf_url) {
-        (meeting as any).minutes_url = response.pdf_url;
+        meeting.minutes_url = response.pdf_url;
       } else if (meeting.minutes_url && !meeting.minutes_url.startsWith('http') && !meeting.minutes_url.startsWith('/')) {
         // Local relative path from backend; use meetings proxy endpoint
-        (meeting as any).minutes_url = `/api/v1/meetings/${meeting.id}/pdf`;
+        meeting.minutes_url = `/api/v1/meetings/${meeting.id}/pdf`;
       }
 
       console.log('Meeting fetched successfully:', meeting.title);
@@ -200,7 +200,7 @@ export const MeetingsPage: React.FC = () => {
         meetingId,
         errorMessage: err instanceof Error ? err.message : 'Unknown error',
         demoMode,
-        environment: process.env.NODE_ENV
+        environment: import.meta.env.MODE
       });
 
       toast.error(`Failed to load meeting details. Please try again.`);
@@ -910,7 +910,7 @@ export const MeetingsPage: React.FC = () => {
 
                   {/* Simple approvals chart */}
                   {(() => {
-                    const stats = selectedMeeting.vote_statistics || { items_passed: 0, items_failed: 0 } as any;
+                    const stats = selectedMeeting.vote_statistics || { items_passed: 0, items_failed: 0 };
                     const passed = Number(stats.items_passed || 0);
                     const failed = Number(stats.items_failed || 0);
                     const total = Math.max(passed + failed, 1);

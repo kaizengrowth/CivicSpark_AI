@@ -50,7 +50,6 @@ export const apiRequest = async <T>(
   options: RequestInit = {}
 ): Promise<T> => {
   const url = `${API_BASE_URL}${endpoint}`;
-  console.log('Making API request to:', url);
 
   const defaultOptions: RequestInit = {
     headers: {
@@ -60,42 +59,20 @@ export const apiRequest = async <T>(
     ...options,
   };
 
-  try {
-    console.log('Sending request with options:', defaultOptions);
-    const response = await fetch(url, defaultOptions);
-    console.log('Response status:', response.status);
-    console.log('Response ok:', response.ok);
+  const response = await fetch(url, defaultOptions);
 
-    if (!response.ok) {
-      // Enhanced error handling for production debugging
-      let errorMessage = `HTTP error! status: ${response.status}`;
-
-      try {
-        const errorText = await response.text();
-        console.error('Response error text:', errorText);
-        errorMessage += `, text: ${errorText}`;
-      } catch (e) {
-        console.error('Could not read error response text');
-      }
-
-      throw new Error(errorMessage);
+  if (!response.ok) {
+    let errorMessage = `HTTP error! status: ${response.status}`;
+    try {
+      const errorText = await response.text();
+      errorMessage += `, text: ${errorText}`;
+    } catch {
+      // response body was unreadable; keep the status-only message
     }
-
-    const data = await response.json();
-    console.log('Response data received successfully');
-    return data;
-  } catch (error) {
-    console.error('API request failed:', error);
-    console.error('URL attempted:', url);
-    console.error('Error type:', typeof error);
-
-    if (error instanceof Error) {
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
-    }
-
-    throw error;
+    throw new Error(errorMessage);
   }
+
+  return response.json();
 };
 
 export default {
