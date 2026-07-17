@@ -1,12 +1,12 @@
 import logging
 import os
-from typing import List, Optional
 
 import openai
-from app.core.config import Settings
-from app.services.geocoding_service import GeocodingService
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from app.core.config import Settings
+from app.services.geocoding_service import GeocodingService
 
 logger = logging.getLogger(__name__)
 
@@ -21,22 +21,22 @@ class Representative(BaseModel):
     name: str
     position: str
     email: str
-    district: Optional[str] = None
-    phone: Optional[str] = None
+    district: str | None = None
+    phone: str | None = None
 
 
 class EmailComposeRequest(BaseModel):
     address: str
     issue: str
     tone: str  # 'formal', 'friendly', 'urgent'
-    representatives: List[Representative]
+    representatives: list[Representative]
 
 
 class EmailComposition(BaseModel):
     subject: str
     body: str
     tone: str
-    representatives: List[Representative]
+    representatives: list[Representative]
 
 
 # Sample representatives data - in production this would come from a database
@@ -213,11 +213,11 @@ async def compose_email(request: EmailComposeRequest) -> EmailComposition:
         logger.error(f"Error composing email: {str(e)}")
         raise HTTPException(
             status_code=500, detail="Unable to generate email composition"
-        )
+        ) from e
 
 
 async def generate_ai_email(
-    issue: str, tone: str, representative: Optional[Representative]
+    issue: str, tone: str, representative: Representative | None
 ) -> tuple[str, str]:
     """
     Use OpenAI to generate a professional email to city representatives.
@@ -291,7 +291,7 @@ async def generate_ai_email(
 
 
 def generate_template_email(
-    issue: str, tone: str, representative: Optional[Representative]
+    issue: str, tone: str, representative: Representative | None
 ) -> tuple[str, str]:
     """
     Generate email using templates when AI is not available.

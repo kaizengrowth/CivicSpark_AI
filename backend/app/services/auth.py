@@ -1,15 +1,15 @@
 from datetime import datetime, timedelta
-from typing import Optional, Union
 
-from app.core.config import settings
-from app.core.database import get_db
-from app.models.user import User
-from app.schemas.user import TokenData, UserCreate
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.core.database import get_db
+from app.models.user import User
+from app.schemas.user import TokenData, UserCreate
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -32,7 +32,7 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def authenticate_user(db: Session, email: str, password: str) -> Union[User, bool]:
+def authenticate_user(db: Session, email: str, password: str) -> User | bool:
     """
     Authenticate a user by email and password
     """
@@ -44,7 +44,7 @@ def authenticate_user(db: Session, email: str, password: str) -> Union[User, boo
     return user
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     """
     Create a JWT access token
     """
@@ -100,8 +100,8 @@ async def get_current_user(
         if email is None:
             raise credentials_exception
         token_data = TokenData(email=email)
-    except JWTError:
-        raise credentials_exception
+    except JWTError as e:
+        raise credentials_exception from e
 
     user = db.query(User).filter(User.email == token_data.email).first()
     if user is None:
@@ -144,21 +144,21 @@ async def get_current_admin_user(
     return current_user
 
 
-def get_user_by_email(db: Session, email: str) -> Optional[User]:
+def get_user_by_email(db: Session, email: str) -> User | None:
     """
     Get user by email
     """
     return db.query(User).filter(User.email == email).first()
 
 
-def get_user_by_username(db: Session, username: str) -> Optional[User]:
+def get_user_by_username(db: Session, username: str) -> User | None:
     """
     Get user by username
     """
     return db.query(User).filter(User.username == username).first()
 
 
-def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
+def get_user_by_id(db: Session, user_id: int) -> User | None:
     """
     Get user by ID
     """

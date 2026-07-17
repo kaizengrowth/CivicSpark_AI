@@ -4,22 +4,21 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.database import create_tables
 from app.core.exceptions import (
-    CityCampException,
-    citycamp_exception_handler,
+    CivicSparkException,
+    civicspark_exception_handler,
     general_exception_handler,
     http_exception_handler,
     validation_exception_handler,
 )
 from app.schemas.base import HealthCheckResponse
-from fastapi import FastAPI, HTTPException
-from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
-
-from app.api.v1 import api_router
 
 
 # Custom JSON encoder for datetime objects
@@ -44,7 +43,7 @@ async def lifespan(app: FastAPI):
     Startup and shutdown events
     """
     # Startup
-    logger.info("Starting up CityCamp AI...")
+    logger.info("Starting up CivicSpark AI...")
 
     # Try to create tables, but don't fail if database is not ready
     max_retries = 5
@@ -65,7 +64,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    logger.info("Shutting down CityCamp AI...")
+    logger.info("Shutting down CivicSpark AI...")
 
 
 # Create FastAPI app
@@ -78,18 +77,18 @@ app = FastAPI(
     redoc_url="/redoc" if settings.debug else None,
 )
 
-# Add CORS middleware
+# Add CORS middleware (origins configured via CORS_ORIGINS env var in production)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=False,  # Set to False when using allow_origins=["*"]
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
 # Exception handlers
-app.add_exception_handler(CityCampException, citycamp_exception_handler)
+app.add_exception_handler(CivicSparkException, civicspark_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, general_exception_handler)

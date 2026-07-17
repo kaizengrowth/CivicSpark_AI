@@ -1,4 +1,6 @@
-from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, func, or_
+from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.exceptions import NotFoundError
@@ -7,13 +9,8 @@ from app.schemas.base import PaginationParams, StandardListResponse
 from app.schemas.organization import Organization as OrganizationSchema
 from app.schemas.organization import (
     OrganizationCreate,
-    OrganizationList,
-    OrganizationSummary,
     OrganizationUpdate,
 )
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import Session
 
 router = APIRouter()
 
@@ -21,13 +18,13 @@ router = APIRouter()
 @router.get("/", response_model=StandardListResponse[OrganizationSchema])
 def list_organizations(
     pagination: PaginationParams = Depends(),
-    search: Optional[str] = Query(
+    search: str | None = Query(
         None, description="Search in organization name and description"
     ),
-    organization_type: Optional[str] = Query(
+    organization_type: str | None = Query(
         None, description="Filter by organization type"
     ),
-    focus_area: Optional[str] = Query(None, description="Filter by focus area"),
+    focus_area: str | None = Query(None, description="Filter by focus area"),
     verified_only: bool = Query(False, description="Show only verified organizations"),
     active_only: bool = Query(True, description="Show only active organizations"),
     db: Session = Depends(get_db),
@@ -204,7 +201,7 @@ def delete_organization(
     db.commit()
 
 
-@router.get("/types/list", response_model=List[str])
+@router.get("/types/list", response_model=list[str])
 def get_organization_types(db: Session = Depends(get_db)):
     """
     Get list of all organization types currently in use
@@ -221,7 +218,7 @@ def get_organization_types(db: Session = Depends(get_db)):
     return [t[0] for t in types if t[0]]
 
 
-@router.get("/focus-areas/list", response_model=List[str])
+@router.get("/focus-areas/list", response_model=list[str])
 def get_focus_areas(db: Session = Depends(get_db)):
     """
     Get list of all focus areas currently in use

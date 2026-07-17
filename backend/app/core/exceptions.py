@@ -1,21 +1,22 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
-from app.schemas.base import ErrorResponse
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
+
+from app.schemas.base import ErrorResponse
 
 logger = logging.getLogger(__name__)
 
 
-class CityCampException(Exception):
-    """Base exception class for CityCamp AI application"""
+class CivicSparkException(Exception):
+    """Base exception class for CivicSpark AI application"""
 
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        error_code: str | None = None,
+        details: dict[str, Any] | None = None,
         status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
     ):
         self.message = message
@@ -25,10 +26,10 @@ class CityCampException(Exception):
         super().__init__(self.message)
 
 
-class ValidationError(CityCampException):
+class ValidationError(CivicSparkException):
     """Raised when input validation fails"""
 
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
         super().__init__(
             message=message,
             error_code="VALIDATION_ERROR",
@@ -37,7 +38,7 @@ class ValidationError(CityCampException):
         )
 
 
-class NotFoundError(CityCampException):
+class NotFoundError(CivicSparkException):
     """Raised when a requested resource is not found"""
 
     def __init__(self, resource: str, identifier: Any):
@@ -49,7 +50,7 @@ class NotFoundError(CityCampException):
         )
 
 
-class AuthenticationError(CityCampException):
+class AuthenticationError(CivicSparkException):
     """Raised when authentication fails"""
 
     def __init__(self, message: str = "Authentication failed"):
@@ -60,7 +61,7 @@ class AuthenticationError(CityCampException):
         )
 
 
-class AuthorizationError(CityCampException):
+class AuthorizationError(CivicSparkException):
     """Raised when user lacks permission for an action"""
 
     def __init__(self, message: str = "Access denied"):
@@ -71,10 +72,10 @@ class AuthorizationError(CityCampException):
         )
 
 
-class ServiceUnavailableError(CityCampException):
+class ServiceUnavailableError(CivicSparkException):
     """Raised when an external service is unavailable"""
 
-    def __init__(self, service: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, service: str, details: dict[str, Any] | None = None):
         super().__init__(
             message=f"Service unavailable: {service}",
             error_code="SERVICE_UNAVAILABLE",
@@ -83,11 +84,11 @@ class ServiceUnavailableError(CityCampException):
         )
 
 
-async def citycamp_exception_handler(
-    request: Request, exc: CityCampException
+async def civicspark_exception_handler(
+    request: Request, exc: CivicSparkException
 ) -> JSONResponse:
-    """Handle CityCamp-specific exceptions"""
-    logger.error(f"CityCamp exception: {exc.message}", exc_info=True)
+    """Handle CivicSpark-specific exceptions"""
+    logger.error(f"CivicSpark exception: {exc.message}", exc_info=True)
 
     error_response = ErrorResponse(
         error=exc.message, error_code=exc.error_code, details=exc.details

@@ -1,0 +1,36 @@
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+  "E501", # line length handled by the formatter
+  "B008", # function call in default argument — idiomatic FastAPI Depends()
+  "E712", # == True/False comparisons — required by SQLAlchemy filters
+  "B905", # zip strict= — noisy, low value here
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+exclude = ["alembic/"]
+
+# Strictest coverage first where correctness matters most; widen over time.
+[[tool.mypy.overrides]]
+module = ["app.scrapers.*"]
+check_untyped_defs = false
+
+[tool.pytest.ini_options]
+markers = [
+  "eval: gold-set evaluation suite (costs OpenAI tokens; excluded from default CI)",
+]
+addopts = "-m 'not eval'"

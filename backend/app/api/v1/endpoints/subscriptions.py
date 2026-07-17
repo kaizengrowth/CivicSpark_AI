@@ -1,6 +1,8 @@
 import secrets
 from datetime import datetime, timedelta
-from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
@@ -20,14 +22,11 @@ from app.schemas.subscription import (
     TopicSubscriptionUpdate,
 )
 from app.services.notification_service import NotificationService
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func
-from sqlalchemy.orm import Session
 
 router = APIRouter()
 
 
-@router.get("/topics", response_model=List[MeetingTopicResponse])
+@router.get("/topics", response_model=list[MeetingTopicResponse])
 async def get_available_topics(db: Session = Depends(get_db)):
     """Get all available meeting topics for subscription"""
     topics = (
@@ -36,7 +35,7 @@ async def get_available_topics(db: Session = Depends(get_db)):
         .order_by(MeetingTopic.category, MeetingTopic.display_name)
         .all()
     )
-    
+
     # FastAPI will automatically serialize using response_model
     # No need for manual conversion since we fixed the datetime fields
     return topics
@@ -437,7 +436,7 @@ async def preview_meeting_notification(
 @router.post("/test-sms")
 async def send_test_sms(
     phone_number: str,
-    test_message: str = "🧪 Test SMS from CityCamp AI! Your Twilio integration is working perfectly. 🎉",
+    test_message: str = "🧪 Test SMS from CivicSpark AI! Your Twilio integration is working perfectly. 🎉",
     settings=Depends(get_settings),
 ):
     """Send a test SMS to verify Twilio configuration (admin only)"""

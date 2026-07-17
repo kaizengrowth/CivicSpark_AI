@@ -1,18 +1,17 @@
-import asyncio
 import logging
 import re
 from io import BytesIO
-from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin, urlparse
+from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import pdfplumber
 import pypdf
-import requests
-from app.core.config import Settings
 from bs4 import BeautifulSoup
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+from app.core.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class ResearchService:
 
     async def search_web(
         self, query: str, num_results: int = 5
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search the web using Google Custom Search API"""
         if not self.google_api_key or not self.google_cse_id:
             logger.warning("Google Custom Search API not configured")
@@ -76,7 +75,7 @@ class ResearchService:
             logger.error(f"Web search error: {e}")
             return []
 
-    async def get_page_content(self, url: str) -> Optional[str]:
+    async def get_page_content(self, url: str) -> str | None:
         """Retrieve and extract text content from a web page"""
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -109,7 +108,7 @@ class ResearchService:
             logger.error(f"Error retrieving page content from {url}: {e}")
             return None
 
-    async def retrieve_document(self, url: str) -> Optional[Dict[str, Any]]:
+    async def retrieve_document(self, url: str) -> dict[str, Any] | None:
         """Retrieve and process a document (PDF, DOC, etc.)"""
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -135,9 +134,7 @@ class ResearchService:
             logger.error(f"Error retrieving document from {url}: {e}")
             return None
 
-    async def _process_pdf(
-        self, pdf_content: bytes, url: str
-    ) -> Optional[Dict[str, Any]]:
+    async def _process_pdf(self, pdf_content: bytes, url: str) -> dict[str, Any] | None:
         """Process PDF content and extract text"""
         try:
             pdf_file = BytesIO(pdf_content)
@@ -211,7 +208,7 @@ class ResearchService:
         except Exception:
             return "Document"
 
-    async def search_tulsa_documents(self, query: str) -> List[Dict[str, Any]]:
+    async def search_tulsa_documents(self, query: str) -> list[dict[str, Any]]:
         """Search specifically for Tulsa government documents"""
         try:
             # Search for documents on Tulsa's official sites
@@ -250,7 +247,7 @@ class ResearchService:
             logger.error(f"Error searching Tulsa documents: {e}")
             return []
 
-    def format_search_results(self, results: List[Dict[str, Any]]) -> str:
+    def format_search_results(self, results: list[dict[str, Any]]) -> str:
         """Format search results for AI consumption"""
         if not results:
             return "No search results found."
@@ -263,7 +260,7 @@ class ResearchService:
 
         return formatted
 
-    def format_document_content(self, doc: Dict[str, Any]) -> str:
+    def format_document_content(self, doc: dict[str, Any]) -> str:
         """Format document content for AI consumption"""
         if not doc:
             return "Document could not be retrieved."

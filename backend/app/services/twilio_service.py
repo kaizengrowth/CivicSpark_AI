@@ -1,12 +1,13 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from app.core.config import Settings
-from app.models.subscription import NotificationLog, TopicSubscription
-from app.services.base import BaseService
 from sqlalchemy.orm import Session
 from twilio.base.exceptions import TwilioException
 from twilio.rest import Client
+
+from app.core.config import Settings
+from app.models.subscription import NotificationLog
+from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ class TwilioService(BaseService):
     """Service for sending SMS notifications via Twilio"""
 
     def __init__(self, db: Session, settings: Settings):
-        self.client: Optional[Client] = None
+        self.client: Client | None = None
         super().__init__(db, settings)
 
     def _setup(self):
@@ -44,9 +45,9 @@ class TwilioService(BaseService):
         self,
         to_number: str,
         message: str,
-        subscription_id: Optional[int] = None,
-        meeting_id: Optional[int] = None,
-        db: Optional[Session] = None,
+        subscription_id: int | None = None,
+        meeting_id: int | None = None,
+        db: Session | None = None,
     ) -> dict:
         """
         Send an SMS notification
@@ -139,11 +140,11 @@ class TwilioService(BaseService):
 
     async def send_bulk_sms(
         self,
-        recipients: List[
+        recipients: list[
             dict
         ],  # [{"phone": "+1234567890", "message": "...", "subscription_id": 1}]
-        db: Optional[Session] = None,
-        meeting_id: Optional[int] = None,
+        db: Session | None = None,
+        meeting_id: int | None = None,
     ) -> dict:
         """
         Send SMS to multiple recipients
@@ -165,7 +166,7 @@ class TwilioService(BaseService):
                 "failed": len(recipients),
             }
 
-        results: Dict[str, Any] = {
+        results: dict[str, Any] = {
             "total": len(recipients),
             "sent": 0,
             "failed": 0,
@@ -204,7 +205,7 @@ class TwilioService(BaseService):
         )
         return results
 
-    def _format_phone_number(self, phone_number: str) -> Optional[str]:
+    def _format_phone_number(self, phone_number: str) -> str | None:
         """
         Format phone number to E.164 format
 
@@ -243,10 +244,10 @@ class TwilioService(BaseService):
         db: Session,
         subscription_id: int,
         message: str,
-        meeting_id: Optional[int] = None,
-        external_id: Optional[str] = None,
-        delivery_status: Optional[str] = None,
-        error_message: Optional[str] = None,
+        meeting_id: int | None = None,
+        external_id: str | None = None,
+        delivery_status: str | None = None,
+        error_message: str | None = None,
     ):
         """Log SMS notification to database"""
         try:
@@ -281,11 +282,11 @@ class TwilioService(BaseService):
         Returns:
             Result dictionary
         """
-        message = f"Your CityCamp AI verification code is: {verification_code}. This code will expire in 10 minutes."
+        message = f"Your CivicSpark AI verification code is: {verification_code}. This code will expire in 10 minutes."
 
         return await self.send_sms(to_number=phone_number, message=message)
 
-    async def get_message_status(self, message_sid: str) -> Optional[dict]:
+    async def get_message_status(self, message_sid: str) -> dict | None:
         """
         Get delivery status of a sent message
 
@@ -316,9 +317,9 @@ class TwilioService(BaseService):
         self,
         meeting_title: str,
         meeting_date: str,
-        topics: List[str],
+        topics: list[str],
         advance_hours: int = 24,
-        meeting_url: Optional[str] = None,
+        meeting_url: str | None = None,
     ) -> str:
         """
         Generate a formatted SMS message for meeting notifications
@@ -335,7 +336,7 @@ class TwilioService(BaseService):
         """
         # Keep SMS messages concise (160 chars recommended)
         time_text = (
-            f"{advance_hours}h" if advance_hours < 24 else f"{advance_hours//24}d"
+            f"{advance_hours}h" if advance_hours < 24 else f"{advance_hours // 24}d"
         )
 
         # Basic message
@@ -353,6 +354,6 @@ class TwilioService(BaseService):
         if meeting_url and len(message + meeting_url) < 160:
             message += meeting_url
         else:
-            message += "More info: citycamp-ai.com"
+            message += "More info: civicspark-ai.vercel.app"
 
         return message.strip()

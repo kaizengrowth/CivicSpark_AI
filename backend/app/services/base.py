@@ -1,14 +1,13 @@
 import logging
-from abc import ABC
-from typing import Optional
+
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 
-class BaseService(ABC):
+class BaseService:
     """Base class for all services to provide common functionality and patterns"""
 
     def __init__(self, db: Session, settings: Settings):
@@ -29,7 +28,7 @@ class BaseService(ABC):
                 return False
         return True
 
-    def _log_operation(self, operation: str, details: Optional[str] = None):
+    def _log_operation(self, operation: str, details: str | None = None):
         """Standard logging for service operations"""
         message = f"{operation}"
         if details:

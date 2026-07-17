@@ -1,4 +1,4 @@
-# Scrapers module for CityCamp AI
+# Scrapers module for CivicSpark AI
 # Contains scripts for scraping Tulsa City Council data
 
 from .meeting_scraper import MeetingScraper

@@ -1,29 +1,25 @@
 import json
 import logging
 import re
-from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
 
 import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from sqlalchemy import Text, cast
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
 from app.models.meeting import AgendaItem, Meeting, MeetingCategory
 from app.schemas.base import PaginationParams, StandardListResponse
 from app.schemas.meeting import (
-    AgendaItemResponse,
     CategoryResponse,
     MeetingDetailResponse,
-    MeetingFilterParams,
     MeetingListResponse,
     MeetingResponse,
 )
 from app.services.ai_categorization_service import AICategorization
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from fastapi.encoders import jsonable_encoder
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel
-from sqlalchemy import Text, cast
-from sqlalchemy.orm import Session
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -32,12 +28,12 @@ logger = logging.getLogger(__name__)
 @router.get("/", response_model=StandardListResponse[MeetingResponse])
 async def list_meetings(
     pagination: PaginationParams = Depends(),
-    category: Optional[str] = Query(None, description="Filter by category name"),
-    search: Optional[str] = Query(
+    category: str | None = Query(None, description="Filter by category name"),
+    search: str | None = Query(
         None, description="Search in title, description, or keywords"
     ),
-    year: Optional[int] = Query(None, description="Filter by year"),
-    meeting_type: Optional[str] = Query(None, description="Filter by meeting type"),
+    year: int | None = Query(None, description="Filter by year"),
+    meeting_type: str | None = Query(None, description="Filter by meeting type"),
     db: Session = Depends(get_db),
 ):
     """
@@ -219,7 +215,7 @@ async def get_meeting_detail(meeting_id: int, db: Session = Depends(get_db)):
 
     # key_decisions fallback from agenda_items or voting records if missing
     if not getattr(meeting, "key_decisions", None):
-        derived: List[str] = []
+        derived: list[str] = []
         for item in agenda_items:
             if item.vote_result and item.vote_result.lower() in ["passed", "approved"]:
                 derived.append(f"Approved: {item.title}")
@@ -281,7 +277,7 @@ async def get_meeting_pdf(meeting_id: int, db: Session = Depends(get_db)):
         except httpx.HTTPError as e:
             raise HTTPException(
                 status_code=404, detail=f"Failed to fetch external PDF: {str(e)}"
-            )
+            ) from e
 
     # Handle local files (existing logic)
     # Construct file path - use absolute path from project root
@@ -300,7 +296,7 @@ async def get_meeting_pdf(meeting_id: int, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/categories/", response_model=List[CategoryResponse])
+@router.get("/categories/", response_model=list[CategoryResponse])
 async def get_categories(db: Session = Depends(get_db)):
     """
     Get all available meeting categories with their descriptions and usage counts.
@@ -532,7 +528,7 @@ async def reprocess_meeting(meeting_id: int, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(
             status_code=500, detail=f"Error reprocessing meeting: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/export/categories")

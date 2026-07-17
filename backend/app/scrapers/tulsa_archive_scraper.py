@@ -11,14 +11,13 @@ import time
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import pdfplumber
 import requests
-from app.models.meeting import AgendaItem, Meeting
-from app.services.meeting_upsert_service import MeetingUpsertService
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
+
+from app.models.meeting import Meeting
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +80,7 @@ class TulsaArchiveScraper:
             "Truancy Prevention Task Force": ("truancy_prevention_task_force", "288"),
         }
 
-    def categorize_meeting_type(self, meeting_type: str) -> Tuple[str, str]:
+    def categorize_meeting_type(self, meeting_type: str) -> tuple[str, str]:
         """
         Categorize meeting into document type and meeting category
         Returns: (document_type, meeting_category)
@@ -100,7 +99,7 @@ class TulsaArchiveScraper:
             logger.warning(f"Unknown meeting type: {clean_type}")
             return "agenda", "other"
 
-    def get_meeting_type_form_value(self, meeting_type: str) -> Optional[str]:
+    def get_meeting_type_form_value(self, meeting_type: str) -> str | None:
         """Get the form value for a meeting type"""
         clean_type = meeting_type.strip()
         if clean_type in self.meeting_type_mapping:
@@ -108,16 +107,16 @@ class TulsaArchiveScraper:
             return form_value
         return None
 
-    def scrape_archive_meetings(self, max_pages: int = 50) -> List[Dict]:
+    def scrape_archive_meetings(self, max_pages: int = 50) -> list[dict]:
         """
         Scrape all meetings from the Tulsa Council Archive
         """
-        logger.info(f"🕸️ Starting to scrape Tulsa Council Archive...")
+        logger.info("🕸️ Starting to scrape Tulsa Council Archive...")
 
         meetings_data = []
 
         try:
-            logger.info(f"📄 Scraping archive page...")
+            logger.info("📄 Scraping archive page...")
 
             response = self.session.get(self.archive_url, timeout=30)
             response.raise_for_status()
@@ -151,7 +150,7 @@ class TulsaArchiveScraper:
         logger.info(f"✅ Found {len(meetings_data)} meetings in archive")
         return meetings_data
 
-    def _parse_document_link(self, link) -> Optional[Dict]:
+    def _parse_document_link(self, link) -> dict | None:
         """Parse a document link from the archive"""
         try:
             # Get link details
@@ -202,7 +201,7 @@ class TulsaArchiveScraper:
             logger.error(f"Error parsing document link: {str(e)}")
             return None
 
-    def _parse_meeting_row(self, row) -> Optional[Dict]:
+    def _parse_meeting_row(self, row) -> dict | None:
         """Parse a meeting row from the archive table"""
         try:
             cells = row.find_all(["td", "th"])
@@ -259,7 +258,7 @@ class TulsaArchiveScraper:
             logger.error(f"Error parsing meeting row: {str(e)}")
             return None
 
-    def _parse_meeting_date(self, date_str: str) -> Optional[datetime]:
+    def _parse_meeting_date(self, date_str: str) -> datetime | None:
         """Parse meeting date from various formats"""
         try:
             # Remove any weird characters that might be in the date
@@ -307,7 +306,7 @@ class TulsaArchiveScraper:
 
     def download_document(
         self, url: str, external_id: str, document_type: str = "agenda"
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Download document from URL
         Returns local storage path
@@ -356,7 +355,7 @@ class TulsaArchiveScraper:
             logger.error(f"Error extracting text from PDF {pdf_path}: {str(e)}")
             return ""
 
-    def find_embedded_minutes_links(self, agenda_text: str) -> List[str]:
+    def find_embedded_minutes_links(self, agenda_text: str) -> list[str]:
         """
         Find embedded minutes links in Regular meeting agendas
         These agendas contain links to minutes from previous meetings
@@ -379,13 +378,6 @@ class TulsaArchiveScraper:
                     # Filter for likely minutes
                     if any(term in match.lower() for term in ["minute", "transcript"]):
                         minutes_links.append(match)
-
-            # Pattern 2: References to previous meeting minutes
-            minutes_references = re.findall(
-                r"minutes?\s+(?:of|from)\s+(?:the\s+)?(?:meeting\s+(?:of\s+)?)?([^.]+)",
-                agenda_text,
-                re.IGNORECASE,
-            )
 
             # Pattern 3: Document identifiers that might link to minutes
             doc_patterns = [
@@ -412,8 +404,8 @@ class TulsaArchiveScraper:
             return []
 
     def process_regular_meeting_agenda(
-        self, meeting_data: Dict, agenda_pdf_path: Path
-    ) -> List[str]:
+        self, meeting_data: dict, agenda_pdf_path: Path
+    ) -> list[str]:
         """
         Process a Regular meeting agenda to find and download embedded minutes
         Returns list of downloaded minutes file paths
@@ -446,10 +438,14 @@ class TulsaArchiveScraper:
             downloaded_minutes = []
             for i, minutes_url in enumerate(minutes_links):
                 try:
-                    logger.info(f"📥 Downloading embedded minutes {i+1}: {minutes_url}")
+                    logger.info(
+                        f"📥 Downloading embedded minutes {i + 1}: {minutes_url}"
+                    )
 
                     # Create unique external ID for minutes
-                    minutes_external_id = f"{meeting_data['external_id']}-minutes-{i+1}"
+                    minutes_external_id = (
+                        f"{meeting_data['external_id']}-minutes-{i + 1}"
+                    )
 
                     # Download minutes PDF
                     minutes_path = self.download_document(
@@ -478,8 +474,8 @@ class TulsaArchiveScraper:
             return []
 
     def create_or_update_meeting(
-        self, meeting_data: Dict, pdf_storage_path: Optional[str] = None
-    ) -> Optional[Meeting]:
+        self, meeting_data: dict, pdf_storage_path: str | None = None
+    ) -> Meeting | None:
         """Create or update meeting record in database"""
         try:
             # Check if meeting already exists
@@ -529,8 +525,8 @@ class TulsaArchiveScraper:
         self,
         start_year: int = 2020,
         end_year: int = 2025,
-        meeting_types: List[str] = None,
-    ) -> List[Dict]:
+        meeting_types: list[str] = None,
+    ) -> list[dict]:
         """
         Comprehensive scraping using form submission with date ranges and meeting types
         """
@@ -625,7 +621,7 @@ class TulsaArchiveScraper:
 
     def _parse_document_link_with_context(
         self, link, meeting_type: str, search_date: str
-    ) -> Optional[Dict]:
+    ) -> dict | None:
         """Parse a document link with additional context from search parameters"""
         try:
             href = link.get("href")
@@ -666,11 +662,11 @@ class TulsaArchiveScraper:
 
     async def scrape_and_download_all(
         self, max_meetings: int = 100, use_comprehensive: bool = True
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """
         Main method to scrape all meetings and download documents
         """
-        logger.info(f"🚀 Starting comprehensive Tulsa Archive scraping...")
+        logger.info("🚀 Starting comprehensive Tulsa Archive scraping...")
 
         stats = {
             "meetings_found": 0,
@@ -709,7 +705,7 @@ class TulsaArchiveScraper:
             for i, meeting_data in enumerate(meetings_data):
                 try:
                     logger.info(
-                        f"📋 Processing meeting {i+1}/{len(meetings_data)}: {meeting_data['title']}"
+                        f"📋 Processing meeting {i + 1}/{len(meetings_data)}: {meeting_data['title']}"
                     )
 
                     # Download the primary document (agenda)

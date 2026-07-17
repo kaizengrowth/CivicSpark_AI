@@ -1,11 +1,10 @@
-from typing import List, Optional
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_db
 from app.services.chatbot_service import ChatbotService
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 router = APIRouter()
 
@@ -17,13 +16,13 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    conversation_history: Optional[List[ChatMessage]] = None
+    conversation_history: list[ChatMessage] | None = None
 
 
 class ChatResponse(BaseModel):
     response: str
     success: bool
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @router.get("/status")

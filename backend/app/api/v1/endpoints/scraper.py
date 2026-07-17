@@ -1,12 +1,11 @@
-from typing import Dict, Optional
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.user import User
 from app.scrapers.meeting_scraper import MeetingScraper
 from app.services.auth import get_current_user
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 router = APIRouter()
 
@@ -14,7 +13,7 @@ router = APIRouter()
 class ScrapeResponse(BaseModel):
     success: bool
     message: str
-    stats: Optional[Dict[str, int]] = None
+    stats: dict[str, int] | None = None
 
 
 class ScrapeStatsResponse(BaseModel):
@@ -71,7 +70,7 @@ async def run_scraper_sync(
             success=True, message="Scraper completed successfully", stats=stats
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Scraper failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Scraper failed: {str(e)}") from e
 
 
 @router.get("/stats", response_model=ScrapeStatsResponse)
@@ -109,7 +108,7 @@ async def cleanup_old_meetings(
             stats={"meetings_deleted": count},
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}") from e
 
 
 @router.post("/meeting/{meeting_id}/update-status")

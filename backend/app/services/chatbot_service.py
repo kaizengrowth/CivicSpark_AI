@@ -1,15 +1,15 @@
-import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
+
+from openai import OpenAI
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.models.campaign import Campaign
 from app.models.meeting import Meeting
 from app.services.research_service import ResearchService
 from app.services.vector_service import VectorService
-from openai import OpenAI
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class ChatbotService:
 
     def get_system_prompt(self) -> str:
         """Get the enhanced system prompt for the chatbot"""
-        return """You are CityCamp AI, a knowledgeable and friendly assistant focused on Tulsa, Oklahoma civic engagement and city government.
+        return """You are CivicSpark AI, a knowledgeable and friendly assistant focused on Tulsa, Oklahoma civic engagement and city government.
 
 You have extensive knowledge about Tulsa government, civic processes, city services, local politics, and community engagement opportunities. Feel free to provide detailed, conversational responses that help people understand and get involved in their local government.
 
@@ -360,7 +360,7 @@ If asked about non-Tulsa topics, politely redirect: "I focus on **Tulsa, Oklahom
 
 Be natural, conversational, and as helpful as possible in encouraging civic participation."""
 
-    def get_function_definitions(self) -> List[Dict[str, Any]]:
+    def get_function_definitions(self) -> list[dict[str, Any]]:
         """Define available functions for OpenAI function calling"""
         return [
             {
@@ -407,7 +407,7 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
         ]
 
     async def process_function_call(
-        self, function_name: str, arguments: Dict[str, Any]
+        self, function_name: str, arguments: dict[str, Any]
     ) -> str:
         """Process function calls from OpenAI"""
         try:
@@ -478,8 +478,7 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
             context = "Recent Tulsa City Council meetings:\n"
             for meeting in recent_meetings:
                 context += (
-                    f"- {meeting.title} on "
-                    f"{meeting.meeting_date.strftime('%B %d, %Y')}"
+                    f"- {meeting.title} on {meeting.meeting_date.strftime('%B %d, %Y')}"
                 )
                 if meeting.summary:
                     context += f": {meeting.summary[:100]}..."
@@ -516,7 +515,7 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
     async def get_ai_response(
         self,
         user_message: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
     ) -> str:
         """Get AI response with enhanced research capabilities"""
         try:
@@ -661,7 +660,7 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
 
         # General greeting
         if any(word in message_lower for word in ["hello", "hi", "help", "start"]):
-            return "Hi! I'm your **CityCamp AI** assistant for **Tulsa** civic engagement. I can help with meetings, campaigns, and notifications. What do you need?"
+            return "Hi! I'm your **CivicSpark AI** assistant for **Tulsa** civic engagement. I can help with meetings, campaigns, and notifications. What do you need?"
 
         # Default response
         return "I help with **Tulsa** civic engagement - meetings, campaigns, and community involvement. What can I assist you with?"

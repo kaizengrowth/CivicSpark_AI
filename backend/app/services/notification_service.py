@@ -1,18 +1,16 @@
-import asyncio
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import List, Optional, Set
+
+from sqlalchemy import Text, cast, or_
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.database import get_db
 from app.models.meeting import Meeting
 from app.models.notification_preferences import NotificationPreferences
 from app.models.subscription import MeetingTopic, TopicSubscription
 from app.services.base import BaseService
 from app.services.twilio_service import TwilioService
-from sqlalchemy import Text, and_, cast, or_
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +108,6 @@ class NotificationService(BaseService):
 
             # Check if it's time to send notification based on subscriber's preference
             if hours_until_meeting <= subscription.advance_notice_hours:
-
                 # Check if we've already sent a notification for this meeting
                 if self._already_notified(db, subscription.id, meeting.id):
                     logger.debug(
@@ -179,7 +176,7 @@ class NotificationService(BaseService):
 
     def _find_interested_subscribers(
         self, db: Session, meeting: Meeting
-    ) -> List[NotificationPreferences]:
+    ) -> list[NotificationPreferences]:
         """
         Find subscribers interested in a specific meeting based on topics and meeting type
         """
@@ -222,7 +219,7 @@ class NotificationService(BaseService):
 
     def _get_matched_topics(
         self, meeting: Meeting, subscription: NotificationPreferences
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Get the topics from the meeting that match the subscriber's interests
         """
@@ -303,7 +300,7 @@ class NotificationService(BaseService):
             db.rollback()
 
     async def send_test_notification(
-        self, db: Session, subscription_id: int, test_message: Optional[str] = None
+        self, db: Session, subscription_id: int, test_message: str | None = None
     ) -> dict:
         """
         Send a test notification to a specific subscriber
@@ -322,7 +319,7 @@ class NotificationService(BaseService):
 
         message = (
             test_message
-            or f"🧪 Test notification from CityCamp AI! You're subscribed to receive alerts about Tulsa city meetings. This confirms your notifications are working."
+            or "🧪 Test notification from CivicSpark AI! You're subscribed to receive alerts about Tulsa city meetings. This confirms your notifications are working."
         )
 
         results = []

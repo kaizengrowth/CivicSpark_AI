@@ -2,7 +2,7 @@
 # Development startup script
 # This script sets up the development environment and starts the server
 
-echo "🔧 Starting CityCamp AI in Development Mode"
+echo "🔧 Starting CivicSpark AI in Development Mode"
 
 # Set environment variable to use development config
 export ENV_FILE=".env.development"

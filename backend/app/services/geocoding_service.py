@@ -1,13 +1,11 @@
-import asyncio
 import json
 import logging
-import re
-from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import quote
+from typing import Any
 
 import httpx
+
 from app.core.config import Settings
-from app.data.tulsa_districts import DISTRICT_REPRESENTATIVES, DISTRICT_BOUNDARIES
+from app.data.tulsa_districts import DISTRICT_BOUNDARIES, DISTRICT_REPRESENTATIVES
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ class GeocodingService:
 
     async def geocode_address(
         self, address: str, city: str = "Tulsa", state: str = "OK"
-    ) -> Optional[Tuple[float, float]]:
+    ) -> tuple[float, float] | None:
         """
         Geocode an address to latitude/longitude coordinates using Geocodio.
 
@@ -50,7 +48,7 @@ class GeocodingService:
 
         return None
 
-    async def _geocode_with_geocodio(self, address: str) -> Optional[Tuple[float, float]]:
+    async def _geocode_with_geocodio(self, address: str) -> tuple[float, float] | None:
         """Geocode using Geocodio API."""
         try:
             # Check if API key is available
@@ -64,26 +62,28 @@ class GeocodingService:
                 "api_key": self.geocodio_api_key,
                 "limit": 1,
             }
-            
+
             # Add proper headers
             headers = {
-                "User-Agent": "CityCampAI/1.0 (https://citycamp.ai; contact@citycamp.ai)",
+                "User-Agent": "CivicSparkAI/1.0 (https://github.com/kaizengrowth/CivicSpark_AI)",
                 "Accept": "application/json",
             }
 
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, params=params, headers=headers)
-                
+
                 # Check if response is successful
                 if response.status_code != 200:
-                    logger.error(f"Geocodio API returned status {response.status_code}: {response.text}")
+                    logger.error(
+                        f"Geocodio API returned status {response.status_code}: {response.text}"
+                    )
                     return None
-                
+
                 # Check if response has content
                 if not response.text.strip():
                     logger.error("Geocodio API returned empty response")
                     return None
-                
+
                 data = response.json()
 
                 if data.get("results") and len(data["results"]) > 0:
@@ -91,17 +91,21 @@ class GeocodingService:
                     location = result.get("location", {})
                     lat = location.get("lat")
                     lng = location.get("lng")
-                    
+
                     if lat is not None and lng is not None:
                         lat = float(lat)
                         lng = float(lng)
-                        
+
                         # Verify the result is in Tulsa area
                         if self._is_in_tulsa_area(lat, lng):
-                            logger.info(f"Successfully geocoded '{address}' to {lat}, {lng}")
+                            logger.info(
+                                f"Successfully geocoded '{address}' to {lat}, {lng}"
+                            )
                             return (lat, lng)
                         else:
-                            logger.warning(f"Geocoded result outside Tulsa area: {lat}, {lng}")
+                            logger.warning(
+                                f"Geocoded result outside Tulsa area: {lat}, {lng}"
+                            )
 
         except json.JSONDecodeError as e:
             logger.error(f"Geocodio API returned invalid JSON: {str(e)}")
@@ -110,24 +114,24 @@ class GeocodingService:
 
         return None
 
-
-
     def _is_in_tulsa_area(self, lat: float, lon: float) -> bool:
         """Check if coordinates are within Tulsa metropolitan area."""
         # Expanded boundaries for Tulsa metropolitan area to be more inclusive
         tulsa_bounds = {
-            "min_lat": 35.7,   # Expanded south
-            "max_lat": 36.5,   # Expanded north
+            "min_lat": 35.7,  # Expanded south
+            "max_lat": 36.5,  # Expanded north
             "min_lon": -96.3,  # Expanded west
-            "max_lon": -95.6   # Expanded east
+            "max_lon": -95.6,  # Expanded east
         }
-        
-        return (tulsa_bounds["min_lat"] <= lat <= tulsa_bounds["max_lat"] and
-                tulsa_bounds["min_lon"] <= lon <= tulsa_bounds["max_lon"])
+
+        return (
+            tulsa_bounds["min_lat"] <= lat <= tulsa_bounds["max_lat"]
+            and tulsa_bounds["min_lon"] <= lon <= tulsa_bounds["max_lon"]
+        )
 
     def determine_district_by_coords(
         self, latitude: float, longitude: float
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Determine district using real boundary data from GeoJSON.
         Uses point-in-polygon algorithm to check if coordinates fall within district boundaries.
@@ -135,24 +139,30 @@ class GeocodingService:
         try:
             # Use real district boundaries if available
             if DISTRICT_BOUNDARIES:
-                district = self._point_in_polygon_district_determination(latitude, longitude)
+                district = self._point_in_polygon_district_determination(
+                    latitude, longitude
+                )
                 if district:
                     return district
-                
+
                 # If no exact match, try to find the closest district
                 closest_district = self._find_closest_district(latitude, longitude)
                 if closest_district:
-                    logger.info(f"Using closest district {closest_district} for coordinates ({latitude}, {longitude})")
+                    logger.info(
+                        f"Using closest district {closest_district} for coordinates ({latitude}, {longitude})"
+                    )
                     return closest_district
-            
+
             # No fallback available - return None if no district found
             return None
-            
+
         except Exception as e:
             logger.error(f"Error determining district by coordinates: {str(e)}")
             return None
 
-    def _point_in_polygon_district_determination(self, lat: float, lng: float) -> Optional[str]:
+    def _point_in_polygon_district_determination(
+        self, lat: float, lng: float
+    ) -> str | None:
         """
         Determine district using point-in-polygon algorithm with real boundaries.
         """
@@ -161,50 +171,54 @@ class GeocodingService:
                 return district_name
         return None
 
-    def _point_in_polygon(self, lat: float, lng: float, polygon: List[Tuple[float, float]]) -> bool:
+    def _point_in_polygon(
+        self, lat: float, lng: float, polygon: list[tuple[float, float]]
+    ) -> bool:
         """
         Ray casting algorithm to determine if a point is inside a polygon.
         Improved version that handles edge cases better.
         """
         if not polygon or len(polygon) < 3:
             return False
-            
+
         n = len(polygon)
         inside = False
-        
+
         # Handle the case where the polygon is closed (first and last points are the same)
         if polygon[0] == polygon[-1]:
             polygon = polygon[:-1]  # Remove the duplicate closing point
             n = len(polygon)
-        
+
         j = n - 1
         for i in range(n):
             xi, yi = polygon[i]
             xj, yj = polygon[j]
-            
+
             # Check if point is on the boundary
             if (lat == yi and lng == xi) or (lat == yj and lng == xj):
                 return True
-                
+
             # Check if point is on a horizontal edge
             if yi == yj and lat == yi:
                 if min(xi, xj) <= lng <= max(xi, xj):
                     return True
-            
+
             # Check if point is on a vertical edge
             if xi == xj and lng == xi:
                 if min(yi, yj) <= lat <= max(yi, yj):
                     return True
-            
+
             # Ray casting algorithm
-            if ((yi > lat) != (yj > lat)) and (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi):
+            if ((yi > lat) != (yj > lat)) and (
+                lng < (xj - xi) * (lat - yi) / (yj - yi) + xi
+            ):
                 inside = not inside
-                
+
             j = i
-            
+
         return inside
 
-    def _find_closest_district(self, lat: float, lng: float) -> Optional[str]:
+    def _find_closest_district(self, lat: float, lng: float) -> str | None:
         """
         Find the closest district by calculating distance to district centroids.
         This is used as a fallback when coordinates don't fall exactly within boundaries.
@@ -221,25 +235,25 @@ class GeocodingService:
             "District 8": (36.03, -95.92),  # South
             "District 9": (36.07, -95.87),  # Southeast
         }
-        
-        min_distance = float('inf')
+
+        min_distance = float("inf")
         closest_district = None
-        
+
         for district_name, (centroid_lat, centroid_lng) in district_centroids.items():
             # Calculate distance using simple Euclidean distance
             distance = ((lat - centroid_lat) ** 2 + (lng - centroid_lng) ** 2) ** 0.5
-            
+
             if distance < min_distance:
                 min_distance = distance
                 closest_district = district_name
-        
+
         # Only return if the closest district is reasonably close (within ~0.1 degrees)
         if min_distance < 0.1:
             return closest_district
-        
+
         return None
 
-    async def find_district_by_address(self, address: str) -> Dict[str, Any]:
+    async def find_district_by_address(self, address: str) -> dict[str, Any]:
         """
         Find city council district for a given address using multiple methods.
 
@@ -249,7 +263,7 @@ class GeocodingService:
         Returns:
             Dict containing district info, coordinates, and status
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "address": address,
             "coordinates": None,
             "district": None,
@@ -274,9 +288,7 @@ class GeocodingService:
                     return result
 
             # If no methods worked
-            result["error"] = (
-                "Address not found within Tulsa city limits"
-            )
+            result["error"] = "Address not found within Tulsa city limits"
 
         except Exception as e:
             logger.error(f"Error finding district for address '{address}': {str(e)}")
@@ -284,7 +296,7 @@ class GeocodingService:
 
         return result
 
-    def get_all_representatives(self) -> List[Dict[str, str]]:
+    def get_all_representatives(self) -> list[dict[str, str]]:
         """Get all district representatives plus mayor."""
         representatives = []
 

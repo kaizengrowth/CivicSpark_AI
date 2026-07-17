@@ -1,27 +1,26 @@
 from datetime import datetime
-from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, desc, or_
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.models import Campaign, CampaignMembership, User
 from app.schemas.campaign import (
     CampaignCreate,
     CampaignListResponse,
-    CampaignMembershipCreate,
     CampaignMembershipResponse,
     CampaignResponse,
     CampaignUpdate,
     UserCampaignSummary,
 )
 from app.services.auth import get_current_active_user
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, desc, func, or_
-from sqlalchemy.orm import Session, selectinload
 
 router = APIRouter()
 
 
 def add_user_membership_info(
-    campaign: Campaign, user_id: Optional[int] = None
+    campaign: Campaign, user_id: int | None = None
 ) -> CampaignResponse:
     """Add user membership information to campaign response"""
     campaign_data = CampaignResponse.model_validate(campaign)
@@ -44,13 +43,13 @@ def add_user_membership_info(
 @router.get("/", response_model=CampaignListResponse)
 async def list_campaigns(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_active_user),
+    current_user: User | None = Depends(get_current_active_user),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    category: Optional[str] = Query(None),
-    status: Optional[str] = Query("active"),
-    featured: Optional[bool] = Query(None),
-    search: Optional[str] = Query(None),
+    category: str | None = Query(None),
+    status: str | None = Query("active"),
+    featured: bool | None = Query(None),
+    search: str | None = Query(None),
 ):
     """Get list of campaigns with pagination and filtering"""
 
@@ -156,7 +155,7 @@ async def create_campaign(
 async def get_campaign(
     campaign_id: int,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_active_user),
+    current_user: User | None = Depends(get_current_active_user),
 ):
     """Get a specific campaign by ID"""
 

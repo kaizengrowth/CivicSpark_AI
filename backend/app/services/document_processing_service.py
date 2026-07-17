@@ -1,10 +1,8 @@
-import asyncio
 import logging
 import os
 import re
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import fitz  # PyMuPDF
 
@@ -29,14 +27,15 @@ except ImportError:
     tiktoken = None
     TIKTOKEN_AVAILABLE = False
     print("Warning: tiktoken not available, token counting will be limited")
-from app.core.config import Settings
-from app.models.document import Document, DocumentChunk
-from app.services.vector_service import VectorService
 from docx import Document as DocxDocument
 
 # AI and NLP imports
 from openai import OpenAI
 from sqlalchemy.orm import Session
+
+from app.core.config import Settings
+from app.models.document import Document, DocumentChunk
+from app.services.vector_service import VectorService
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +74,7 @@ class DocumentProcessor:
         }
         return mime_map.get(ext, "application/octet-stream")
 
-    def extract_text_from_pdf(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
+    def extract_text_from_pdf(self, file_path: str) -> tuple[str, dict[str, Any]]:
         """Extract text from PDF using multiple methods for best results"""
         text = ""
         metadata = {"page_count": 0, "extraction_method": ""}
@@ -141,7 +140,7 @@ class DocumentProcessor:
 
         return text, metadata
 
-    def extract_text_from_docx(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
+    def extract_text_from_docx(self, file_path: str) -> tuple[str, dict[str, Any]]:
         """Extract text from DOCX file"""
         try:
             doc = DocxDocument(file_path)
@@ -161,10 +160,10 @@ class DocumentProcessor:
             logger.error(f"Error extracting text from DOCX {file_path}: {e}")
             return "", {}
 
-    def extract_text_from_txt(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
+    def extract_text_from_txt(self, file_path: str) -> tuple[str, dict[str, Any]]:
         """Extract text from plain text file"""
         try:
-            with open(file_path, "r", encoding="utf-8") as file:
+            with open(file_path, encoding="utf-8") as file:
                 text = file.read()
 
             metadata = {
@@ -177,7 +176,7 @@ class DocumentProcessor:
         except UnicodeDecodeError:
             # Try with different encoding
             try:
-                with open(file_path, "r", encoding="latin-1") as file:
+                with open(file_path, encoding="latin-1") as file:
                     text = file.read()
 
                 metadata = {
@@ -197,7 +196,7 @@ class DocumentProcessor:
 
     def extract_text(
         self, file_path: str, mime_type: str
-    ) -> Tuple[str, Dict[str, Any]]:
+    ) -> tuple[str, dict[str, Any]]:
         """Extract text based on file type"""
         if mime_type == "application/pdf":
             return self.extract_text_from_pdf(file_path)
@@ -241,7 +240,7 @@ class DocumentProcessor:
 
     def chunk_text(
         self, text: str, max_tokens: int = 1000, overlap_tokens: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Split text into overlapping chunks"""
         chunks = []
 
@@ -351,7 +350,7 @@ class DocumentProcessor:
         overlap_words = max(1, overlap_tokens // 4)
         return " ".join(words[-overlap_words:])
 
-    async def extract_keywords(self, text: str) -> List[str]:
+    async def extract_keywords(self, text: str) -> list[str]:
         """Extract keywords using OpenAI"""
         if not self.openai_client:
             return []
@@ -425,8 +424,8 @@ class DocumentProcessingService:
         self.vector_service = VectorService(settings)
 
     async def process_document(
-        self, file_path: str, document_data: Dict[str, Any]
-    ) -> Optional[Document]:
+        self, file_path: str, document_data: dict[str, Any]
+    ) -> Document | None:
         """Process a document file and add it to the database and vector store"""
         try:
             # Detect file type

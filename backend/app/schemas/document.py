@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -7,13 +6,13 @@ from pydantic import BaseModel, Field
 class DocumentBase(BaseModel):
     title: str
     document_type: str
-    category: Optional[str] = None
-    summary: Optional[str] = None
-    source_url: Optional[str] = None
-    document_date: Optional[datetime] = None
-    effective_date: Optional[datetime] = None
-    tags: List[str] = []
-    keywords: List[str] = []
+    category: str | None = None
+    summary: str | None = None
+    source_url: str | None = None
+    document_date: datetime | None = None
+    effective_date: datetime | None = None
+    tags: list[str] = []
+    keywords: list[str] = []
     is_public: bool = True
 
 
@@ -26,43 +25,43 @@ class DocumentCreate(DocumentBase):
 
 
 class DocumentUpdate(BaseModel):
-    title: Optional[str] = None
-    document_type: Optional[str] = None
-    category: Optional[str] = None
-    summary: Optional[str] = None
-    source_url: Optional[str] = None
-    document_date: Optional[datetime] = None
-    effective_date: Optional[datetime] = None
-    tags: Optional[List[str]] = None
-    keywords: Optional[List[str]] = None
-    is_public: Optional[bool] = None
+    title: str | None = None
+    document_type: str | None = None
+    category: str | None = None
+    summary: str | None = None
+    source_url: str | None = None
+    document_date: datetime | None = None
+    effective_date: datetime | None = None
+    tags: list[str] | None = None
+    keywords: list[str] | None = None
+    is_public: bool | None = None
 
 
 class DocumentResponse(DocumentBase):
     id: int
-    content: Optional[str] = None  # Only include if requested
+    content: str | None = None  # Only include if requested
     file_name: str
     file_size: int
     mime_type: str
-    word_count: Optional[int] = None
-    page_count: Optional[int] = None
+    word_count: int | None = None
+    page_count: int | None = None
     chunk_count: int = 0
     is_processed: bool = False
     processing_status: str = "pending"
-    processing_error: Optional[str] = None
-    relevance_score: Optional[float] = None
-    quality_score: Optional[float] = None
-    entities: List[str] = []
+    processing_error: str | None = None
+    relevance_score: float | None = None
+    quality_score: float | None = None
+    entities: list[str] = []
     created_at: datetime
-    updated_at: Optional[datetime] = None
-    uploaded_by: Optional[int] = None
+    updated_at: datetime | None = None
+    uploaded_by: int | None = None
 
     class Config:
         from_attributes = True
 
 
 class DocumentListResponse(BaseModel):
-    documents: List[DocumentResponse]
+    documents: list[DocumentResponse]
     total: int
     skip: int
     limit: int
@@ -74,11 +73,11 @@ class DocumentChunkResponse(BaseModel):
     content: str
     chunk_index: int
     word_count: int
-    sentence_count: Optional[int] = None
-    section_title: Optional[str] = None
-    section_type: Optional[str] = None
-    coherence_score: Optional[float] = None
-    importance_score: Optional[float] = None
+    sentence_count: int | None = None
+    section_title: str | None = None
+    section_type: str | None = None
+    coherence_score: float | None = None
+    importance_score: float | None = None
     created_at: datetime
 
     class Config:
@@ -87,8 +86,8 @@ class DocumentChunkResponse(BaseModel):
 
 class DocumentSearchRequest(BaseModel):
     query: str = Field(..., description="Search query")
-    document_type: Optional[str] = Field(None, description="Filter by document type")
-    category: Optional[str] = Field(None, description="Filter by category")
+    document_type: str | None = Field(None, description="Filter by document type")
+    category: str | None = Field(None, description="Filter by category")
     max_results: int = Field(5, ge=1, le=20, description="Maximum number of results")
 
 
@@ -101,7 +100,7 @@ class DocumentSearchResult(BaseModel):
 
 class DocumentSearchResponse(BaseModel):
     query: str
-    results: List[DocumentSearchResult]
+    results: list[DocumentSearchResult]
     total_results: int
 
 
@@ -115,8 +114,8 @@ class DocumentUploadResponse(BaseModel):
 
 class DocumentCollectionBase(BaseModel):
     name: str
-    description: Optional[str] = None
-    collection_type: Optional[str] = None
+    description: str | None = None
+    collection_type: str | None = None
     is_active: bool = True
     is_public: bool = True
 
@@ -126,19 +125,19 @@ class DocumentCollectionCreate(DocumentCollectionBase):
 
 
 class DocumentCollectionUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    collection_type: Optional[str] = None
-    is_active: Optional[bool] = None
-    is_public: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    collection_type: str | None = None
+    is_active: bool | None = None
+    is_public: bool | None = None
 
 
 class DocumentCollectionResponse(DocumentCollectionBase):
     id: int
     created_at: datetime
-    updated_at: Optional[datetime] = None
-    created_by: Optional[int] = None
-    document_count: Optional[int] = 0
+    updated_at: datetime | None = None
+    created_by: int | None = None
+    document_count: int | None = 0
 
     class Config:
         from_attributes = True
@@ -148,5 +147,5 @@ class DocumentStatsResponse(BaseModel):
     total_documents: int
     processed_documents: int
     processing_rate: float
-    by_type: Dict[str, int]
-    by_category: Dict[str, int]
+    by_type: dict[str, int]
+    by_category: dict[str, int]

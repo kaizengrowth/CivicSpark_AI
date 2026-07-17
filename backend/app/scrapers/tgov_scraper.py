@@ -4,13 +4,13 @@ import shutil
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import pdfplumber
 import requests
-from app.models.meeting import Meeting
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
+
+from app.models.meeting import Meeting
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +26,13 @@ class TGOVScraper:
         self.base_url = "https://tulsa-ok.granicus.com"
         self.meetings_url = "https://tulsa-ok.granicus.com/ViewPublisher.php?view_id=4"
         self.session = requests.Session()
-        self.session.headers.update({"User-Agent": "CityCamp AI Bot 1.0"})
+        self.session.headers.update({"User-Agent": "CivicSpark AI Bot 1.0"})
 
         # Setup PDF storage directory
         self.pdf_storage_folder = Path("backend/storage/pdfs")
         self.pdf_storage_folder.mkdir(parents=True, exist_ok=True)
 
-    async def scrape_upcoming_meetings(self, days_ahead: int = 30) -> List[Meeting]:
+    async def scrape_upcoming_meetings(self, days_ahead: int = 30) -> list[Meeting]:
         """
         Scrape upcoming meetings from Tulsa City Council Granicus system
         """
@@ -67,7 +67,7 @@ class TGOVScraper:
             logger.error(f"Error scraping meetings from Granicus: {str(e)}")
             return []
 
-    async def _parse_granicus_meeting_row(self, row) -> Optional[Dict]:
+    async def _parse_granicus_meeting_row(self, row) -> dict | None:
         """Parse meeting row from Granicus upcoming events table"""
         try:
             cells = row.find_all("td")
@@ -116,7 +116,7 @@ class TGOVScraper:
             logger.error(f"Error parsing Granicus meeting row: {str(e)}")
             return None
 
-    async def _scrape_archived_meetings(self) -> List[Meeting]:
+    async def _scrape_archived_meetings(self) -> list[Meeting]:
         """Scrape recent archived meetings that might have minutes/videos"""
         try:
             meetings = []
@@ -145,7 +145,7 @@ class TGOVScraper:
             logger.error(f"Error scraping archived meetings: {str(e)}")
             return []
 
-    async def _parse_archived_meeting_row(self, row) -> Optional[Dict]:
+    async def _parse_archived_meeting_row(self, row) -> dict | None:
         """Parse archived meeting row from Granicus"""
         try:
             cells = row.find_all("td")
@@ -231,7 +231,7 @@ class TGOVScraper:
         else:
             return "other"
 
-    async def _parse_meeting_element(self, element) -> Optional[Dict]:
+    async def _parse_meeting_element(self, element) -> dict | None:
         """Parse individual meeting element from HTML"""
         try:
             # Extract meeting details - adapt this to match actual HTML structure
@@ -250,7 +250,7 @@ class TGOVScraper:
 
             # Parse date - adapt format as needed
             try:
-                meeting_date: Optional[datetime] = datetime.strptime(
+                meeting_date: datetime | None = datetime.strptime(
                     date_str, "%Y-%m-%d %H:%M"
                 )
             except ValueError:
@@ -301,7 +301,7 @@ class TGOVScraper:
             logger.error(f"Error parsing meeting element: {str(e)}")
             return None
 
-    def _parse_flexible_date(self, date_str: str) -> Optional[datetime]:
+    def _parse_flexible_date(self, date_str: str) -> datetime | None:
         """Parse date string with multiple possible formats"""
         # Clean up the date string
         date_str = date_str.strip()
@@ -324,7 +324,7 @@ class TGOVScraper:
         logger.warning(f"Could not parse date string: {date_str}")
         return None
 
-    async def _create_or_update_meeting(self, meeting_data: Dict) -> Meeting:
+    async def _create_or_update_meeting(self, meeting_data: dict) -> Meeting:
         """Create or update meeting in database"""
         existing_meeting = (
             self.db.query(Meeting)
@@ -378,7 +378,7 @@ class TGOVScraper:
                     agenda_full_path = Path("backend") / agenda_pdf_path
                     if agenda_full_path.exists():
                         logger.info(
-                            f"🔍 Searching for meeting minutes links in agenda PDF..."
+                            "🔍 Searching for meeting minutes links in agenda PDF..."
                         )
                         downloaded_minutes = self.download_meeting_minutes_from_agenda(
                             agenda_full_path, meeting_data["external_id"]
@@ -457,7 +457,7 @@ class TGOVScraper:
         self.db.refresh(meeting)
         return meeting
 
-    async def scrape_meeting_minutes(self, meeting: Meeting) -> Optional[str]:
+    async def scrape_meeting_minutes(self, meeting: Meeting) -> str | None:
         """
         Scrape meeting minutes/transcript content
         """
@@ -515,7 +515,7 @@ class TGOVScraper:
             logger.error(f"Error scraping minutes for meeting {meeting.id}: {str(e)}")
             return None
 
-    def download_pdf(self, pdf_url: str, meeting_id: str) -> Optional[str]:
+    def download_pdf(self, pdf_url: str, meeting_id: str) -> str | None:
         """
         Download PDF from URL and store locally
         Returns the stored file path or None if failed
@@ -564,7 +564,7 @@ class TGOVScraper:
 
     def extract_pdf_urls_from_meeting_page(
         self, meeting_page_url: str
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """
         Extract PDF URLs from a meeting's detail page
         Returns dict with 'agenda' and 'minutes' PDF URLs
@@ -625,7 +625,7 @@ class TGOVScraper:
             logger.error(f"Error extracting text from PDF {pdf_path}: {str(e)}")
             return ""
 
-    def find_meeting_minutes_links_in_pdf_text(self, pdf_text: str) -> List[str]:
+    def find_meeting_minutes_links_in_pdf_text(self, pdf_text: str) -> list[str]:
         """
         Find meeting minutes links embedded in agenda PDF text
         Looks for common patterns like URLs, file references, etc.
@@ -713,12 +713,12 @@ class TGOVScraper:
         try:
             result = urllib.parse.urlparse(url)
             return all([result.scheme, result.netloc])
-        except:
+        except Exception:
             return False
 
     def download_meeting_minutes_from_agenda(
         self, agenda_pdf_path: Path, meeting_id: str
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Download meeting minutes by extracting links from agenda PDF
         Returns list of downloaded minutes file paths
@@ -748,11 +748,11 @@ class TGOVScraper:
             for i, minutes_url in enumerate(minutes_links):
                 try:
                     logger.info(
-                        f"  Attempting to download minutes {i+1}: {minutes_url}"
+                        f"  Attempting to download minutes {i + 1}: {minutes_url}"
                     )
 
                     # Create unique filename for minutes
-                    minutes_filename = f"{meeting_id}-minutes-{i+1}"
+                    minutes_filename = f"{meeting_id}-minutes-{i + 1}"
 
                     # Download the minutes PDF
                     minutes_path = self.download_pdf(minutes_url, minutes_filename)
@@ -779,7 +779,7 @@ class TGOVScraper:
             )
             return []
 
-    async def scrape_agenda_items(self, meeting: Meeting) -> List[Meeting]:
+    async def scrape_agenda_items(self, meeting: Meeting) -> list[Meeting]:
         """
         Scrape agenda items for a meeting
         Based on your existing agenda parsing logic
@@ -835,7 +835,7 @@ class TGOVScraper:
             )
             return []
 
-    def _parse_agenda_item(self, element, item_number: int) -> Optional[Dict]:
+    def _parse_agenda_item(self, element, item_number: int) -> dict | None:
         """Parse individual agenda item"""
         try:
             title_elem = element.find(["h3", "h4", "strong"]) or element

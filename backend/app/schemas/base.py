@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +16,7 @@ class PaginationParams(BaseModel):
 class StandardListResponse(BaseModel, Generic[T]):
     """Standardized list response format"""
 
-    items: List[T]
+    items: list[T]
     total: int
     skip: int
     limit: int
@@ -24,7 +24,7 @@ class StandardListResponse(BaseModel, Generic[T]):
     has_prev: bool
 
     @classmethod
-    def create(cls, items: List[T], total: int, skip: int, limit: int):
+    def create(cls, items: list[T], total: int, skip: int, limit: int):
         """Create a standardized list response"""
         return cls(
             items=items,
@@ -41,7 +41,7 @@ class StandardResponse(BaseModel, Generic[T]):
 
     data: T
     success: bool = True
-    message: Optional[str] = None
+    message: str | None = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -50,8 +50,8 @@ class ErrorResponse(BaseModel):
 
     success: bool = False
     error: str
-    error_code: Optional[str] = None
-    details: Optional[Dict[str, Any]] = None
+    error_code: str | None = None
+    details: dict[str, Any] | None = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -63,4 +63,4 @@ class HealthCheckResponse(BaseModel):
     version: str
     environment: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    features: Dict[str, bool] = Field(default_factory=dict)
+    features: dict[str, bool] = Field(default_factory=dict)

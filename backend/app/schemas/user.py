@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr, field_validator
 
@@ -8,9 +7,9 @@ class UserBase(BaseModel):
     email: EmailStr
     username: str
     full_name: str
-    phone_number: Optional[str] = None
-    zip_code: Optional[str] = None
-    council_district: Optional[str] = None
+    phone_number: str | None = None
+    zip_code: str | None = None
+    council_district: str | None = None
 
 
 class UserCreate(UserBase):
@@ -25,10 +24,10 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = None
-    phone_number: Optional[str] = None
-    zip_code: Optional[str] = None
-    council_district: Optional[str] = None
+    full_name: str | None = None
+    phone_number: str | None = None
+    zip_code: str | None = None
+    council_district: str | None = None
 
 
 class UserResponse(UserBase):
@@ -37,8 +36,8 @@ class UserResponse(UserBase):
     is_verified: bool
     is_admin: bool
     created_at: datetime
-    updated_at: Optional[datetime] = None
-    last_login: Optional[datetime] = None
+    updated_at: datetime | None = None
+    last_login: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -56,12 +55,12 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    email: Optional[str] = None
+    email: str | None = None
 
 
 class UserInterestCreate(BaseModel):
     category: str
-    keywords: List[str] = []
+    keywords: list[str] = []
     priority: int = 1
 
     @field_validator("priority")
@@ -76,18 +75,18 @@ class UserInterestResponse(BaseModel):
     id: int
     user_id: int
     category: str
-    keywords: List[str]
+    keywords: list[str]
     priority: int
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
     class Config:
         from_attributes = True
 
 
 class UserInterestUpdate(BaseModel):
-    keywords: Optional[List[str]] = None
-    priority: Optional[int] = None
+    keywords: list[str] | None = None
+    priority: int | None = None
 
     @field_validator("priority")
     @classmethod

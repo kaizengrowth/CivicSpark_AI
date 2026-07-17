@@ -6,12 +6,13 @@ to ensure no duplicates are created when processing PDFs multiple times.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
+
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.models.meeting import AgendaItem, Meeting
 from app.services.ai_categorization_service import ProcessedMeetingContent
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +25,8 @@ class MeetingUpsertService:
         db: Session,
         external_id: str,
         processed_content: ProcessedMeetingContent,
-        meeting_metadata: Dict[str, Any],
-        pdf_storage_path: Optional[str] = None,
+        meeting_metadata: dict[str, Any],
+        pdf_storage_path: str | None = None,
     ) -> tuple[Meeting, bool]:
         """
         Create or update a meeting record.
@@ -134,14 +135,14 @@ class MeetingUpsertService:
             db.add(agenda_item)
 
     @staticmethod
-    def check_duplicate_by_filename(db: Session, external_id: str) -> Optional[Meeting]:
+    def check_duplicate_by_filename(db: Session, external_id: str) -> Meeting | None:
         """Check if a meeting already exists by filename-based external_id"""
         return db.query(Meeting).filter(Meeting.external_id == external_id).first()
 
     @staticmethod
     def check_duplicate_by_date_title(
         db: Session, meeting_date, title: str
-    ) -> Optional[Meeting]:
+    ) -> Meeting | None:
         """Check if a meeting already exists by date and title combination"""
         return (
             db.query(Meeting)

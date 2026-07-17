@@ -1,14 +1,16 @@
 import os
 import tempfile
 from datetime import datetime
-from typing import List, Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_db
-from app.models.document import Document, DocumentChunk, DocumentCollection
+from app.models.document import Document
 from app.models.user import User
 from app.schemas.document import (
-    DocumentCollectionResponse,
     DocumentListResponse,
     DocumentResponse,
     DocumentSearchRequest,
@@ -18,10 +20,6 @@ from app.schemas.document import (
 from app.services.auth import get_current_active_user, get_current_admin_user
 from app.services.document_processing_service import DocumentProcessingService
 from app.services.vector_service import VectorService
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
-from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
 
 router = APIRouter()
 
@@ -30,12 +28,10 @@ router = APIRouter()
 async def list_documents(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    document_type: Optional[str] = Query(None, description="Filter by document type"),
-    category: Optional[str] = Query(None, description="Filter by category"),
-    search: Optional[str] = Query(None, description="Search in title and content"),
-    is_processed: Optional[bool] = Query(
-        None, description="Filter by processing status"
-    ),
+    document_type: str | None = Query(None, description="Filter by document type"),
+    category: str | None = Query(None, description="Filter by category"),
+    search: str | None = Query(None, description="Search in title and content"),
+    is_processed: bool | None = Query(None, description="Filter by processing status"),
     db: Session = Depends(get_db),
 ):
     """List documents with filtering and pagination"""
@@ -155,11 +151,11 @@ async def upload_document(
     file: UploadFile = File(...),
     title: str = Form(...),
     document_type: str = Form(...),
-    category: Optional[str] = Form(None),
-    tags: Optional[str] = Form(None),  # Comma-separated tags
-    document_date: Optional[str] = Form(None),  # ISO format date
-    effective_date: Optional[str] = Form(None),  # ISO format date
-    source_url: Optional[str] = Form(None),
+    category: str | None = Form(None),
+    tags: str | None = Form(None),  # Comma-separated tags
+    document_date: str | None = Form(None),  # ISO format date
+    effective_date: str | None = Form(None),  # ISO format date
+    source_url: str | None = Form(None),
     is_public: bool = Form(True),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),

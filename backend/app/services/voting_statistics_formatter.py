@@ -4,7 +4,7 @@ Formats voting data for UI compatibility and consistency
 """
 
 import logging
-from typing import Any, Dict, List, Union
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +13,8 @@ class VotingStatisticsFormatter:
     """Service for formatting voting records and statistics for UI consumption"""
 
     def format_voting_records_for_ui(
-        self, voting_records: List[Any]
-    ) -> List[Dict[str, Any]]:
+        self, voting_records: list[Any]
+    ) -> list[dict[str, Any]]:
         """Format voting records for UI display"""
         try:
             formatted_records = []
@@ -78,8 +78,8 @@ class VotingStatisticsFormatter:
             return []
 
     def format_vote_statistics_for_ui(
-        self, vote_statistics: Dict[str, Any]
-    ) -> Dict[str, Union[int, List[str]]]:
+        self, vote_statistics: dict[str, Any]
+    ) -> dict[str, int | list[str]]:
         """Format vote statistics for UI display"""
         try:
             if not vote_statistics:
@@ -133,8 +133,8 @@ class VotingStatisticsFormatter:
             return {}
 
     def calculate_attendance_statistics(
-        self, vote_statistics: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, vote_statistics: dict[str, Any]
+    ) -> dict[str, Any]:
         """Calculate attendance-related statistics"""
         try:
             present = vote_statistics.get("council_members_present", [])
@@ -157,8 +157,8 @@ class VotingStatisticsFormatter:
             return {}
 
     def format_for_display(
-        self, voting_records: List[Any], vote_statistics: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, voting_records: list[Any], vote_statistics: dict[str, Any]
+    ) -> dict[str, Any]:
         """Format all voting data for UI display"""
         return {
             "voting_records": self.format_voting_records_for_ui(voting_records),

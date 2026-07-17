@@ -1,13 +1,13 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
 
 import pytz
+from sqlalchemy.orm import Session
+
 from app.core.config import get_settings
 from app.models.meeting import AgendaItem, Meeting
 from app.scrapers.tgov_scraper import TGOVScraper
 from app.services.notification_service import NotificationService
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class MeetingScraper:
         settings = get_settings()
         self.notification_service = NotificationService(db, settings)
 
-    async def run_full_scrape(self, days_ahead: int = 30) -> Dict[str, int]:
+    async def run_full_scrape(self, days_ahead: int = 30) -> dict[str, int]:
         """
         Run a complete scraping cycle
         Returns statistics about what was scraped
@@ -81,7 +81,7 @@ class MeetingScraper:
             logger.error(f"Error in full scrape cycle: {str(e)}")
             return stats
 
-    async def scrape_specific_meeting(self, meeting_url: str) -> Optional[Meeting]:
+    async def scrape_specific_meeting(self, meeting_url: str) -> Meeting | None:
         """
         Scrape a specific meeting by URL
         Useful for manual/targeted scraping
@@ -162,7 +162,7 @@ class MeetingScraper:
                 f"Error sending notifications for meeting {meeting.id}: {str(e)}"
             )
 
-    async def _get_interested_notification_preferences(self, meeting: Meeting) -> List:
+    async def _get_interested_notification_preferences(self, meeting: Meeting) -> list:
         """Get notification preferences for users who should be notified about this meeting"""
         from app.models.notification_preferences import NotificationPreferences
         from app.models.user import User
@@ -186,7 +186,7 @@ class MeetingScraper:
 
         return preferences
 
-    async def get_scraping_stats(self) -> Dict[str, int]:
+    async def get_scraping_stats(self) -> dict[str, int]:
         """Get statistics about scraped data"""
         total_meetings = self.db.query(Meeting).count()
         meetings_with_minutes = (

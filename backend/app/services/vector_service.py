@@ -1,7 +1,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 try:
     import chromadb
@@ -24,6 +24,7 @@ except ImportError:
     print("Warning: faiss not available, vector search will be limited")
 
 import numpy as np
+
 from app.core.config import Settings
 
 try:
@@ -45,20 +46,20 @@ class VectorStore(ABC):
 
     @abstractmethod
     async def add_vectors(
-        self, vectors: List[List[float]], metadata: List[Dict[str, Any]], ids: List[str]
+        self, vectors: list[list[float]], metadata: list[dict[str, Any]], ids: list[str]
     ) -> bool:
         """Add vectors with metadata to the store"""
         pass
 
     @abstractmethod
     async def search_vectors(
-        self, query_vector: List[float], top_k: int = 5
-    ) -> List[Dict[str, Any]]:
+        self, query_vector: list[float], top_k: int = 5
+    ) -> list[dict[str, Any]]:
         """Search for similar vectors"""
         pass
 
     @abstractmethod
-    async def delete_vectors(self, ids: List[str]) -> bool:
+    async def delete_vectors(self, ids: list[str]) -> bool:
         """Delete vectors by IDs"""
         pass
 
@@ -87,7 +88,7 @@ class ChromaVectorStore(VectorStore):
         )
 
     async def add_vectors(
-        self, vectors: List[List[float]], metadata: List[Dict[str, Any]], ids: List[str]
+        self, vectors: list[list[float]], metadata: list[dict[str, Any]], ids: list[str]
     ) -> bool:
         try:
             # Convert vectors to the format ChromaDB expects
@@ -110,8 +111,8 @@ class ChromaVectorStore(VectorStore):
             return False
 
     async def search_vectors(
-        self, query_vector: List[float], top_k: int = 5
-    ) -> List[Dict[str, Any]]:
+        self, query_vector: list[float], top_k: int = 5
+    ) -> list[dict[str, Any]]:
         try:
             results = self.collection.query(
                 query_embeddings=[list(map(float, query_vector))],
@@ -147,7 +148,7 @@ class ChromaVectorStore(VectorStore):
             logger.error(f"Error searching vectors in ChromaDB: {e}")
             return []
 
-    async def delete_vectors(self, ids: List[str]) -> bool:
+    async def delete_vectors(self, ids: list[str]) -> bool:
         try:
             self.collection.delete(ids=ids)
             return True
@@ -163,9 +164,9 @@ class FAISSVectorStore(VectorStore):
         self.dimension = dimension
         self.index_path = index_path
         self.index = faiss.IndexFlatIP(dimension)  # Inner product (cosine similarity)
-        self.metadata_store: Dict[int, Dict[str, Any]] = {}
-        self.id_to_index: Dict[str, int] = {}
-        self.index_to_id: Dict[int, str] = {}
+        self.metadata_store: dict[int, dict[str, Any]] = {}
+        self.id_to_index: dict[str, int] = {}
+        self.index_to_id: dict[int, str] = {}
         self.next_index = 0
 
         # Try to load existing index
@@ -180,7 +181,7 @@ class FAISSVectorStore(VectorStore):
                 self.index = faiss.read_index(f"{self.index_path}.index")
 
             if os.path.exists(f"{self.index_path}.metadata.json"):
-                with open(f"{self.index_path}.metadata.json", "r") as f:
+                with open(f"{self.index_path}.metadata.json") as f:
                     data = json.load(f)
                     self.metadata_store = {
                         int(k): v for k, v in data.get("metadata", {}).items()
@@ -218,7 +219,7 @@ class FAISSVectorStore(VectorStore):
             logger.error(f"Error saving FAISS index: {e}")
 
     async def add_vectors(
-        self, vectors: List[List[float]], metadata: List[Dict[str, Any]], ids: List[str]
+        self, vectors: list[list[float]], metadata: list[dict[str, Any]], ids: list[str]
     ) -> bool:
         try:
             # Convert to numpy array
@@ -249,8 +250,8 @@ class FAISSVectorStore(VectorStore):
             return False
 
     async def search_vectors(
-        self, query_vector: List[float], top_k: int = 5
-    ) -> List[Dict[str, Any]]:
+        self, query_vector: list[float], top_k: int = 5
+    ) -> list[dict[str, Any]]:
         try:
             # Convert and normalize query vector
             query_np = np.array([query_vector], dtype=np.float32)
@@ -261,7 +262,7 @@ class FAISSVectorStore(VectorStore):
 
             # Format results
             results = []
-            for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
+            for _i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
                 if idx == -1:  # No more results
                     break
 
@@ -284,7 +285,7 @@ class FAISSVectorStore(VectorStore):
             logger.error(f"Error searching vectors in FAISS: {e}")
             return []
 
-    async def delete_vectors(self, ids: List[str]) -> bool:
+    async def delete_vectors(self, ids: list[str]) -> bool:
         # FAISS doesn't support deletion easily, would need to rebuild index
         # For now, just mark as deleted in metadata
         try:
@@ -313,7 +314,7 @@ class EmbeddingService:
         )
         self.model = "text-embedding-3-small"  # More cost-effective than ada-002
 
-    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+    async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a list of texts"""
         if not self.client:
             logger.error("OpenAI client not configured")
@@ -330,7 +331,7 @@ class EmbeddingService:
             logger.error(f"Error generating embeddings: {e}")
             return []
 
-    async def generate_embedding(self, text: str) -> List[float]:
+    async def generate_embedding(self, text: str) -> list[float]:
         """Generate embedding for a single text"""
         embeddings = await self.generate_embeddings([text])
         return embeddings[0] if embeddings else []
@@ -349,7 +350,7 @@ class VectorService:
         else:
             self.vector_store = ChromaVectorStore()
 
-    async def add_document_chunks(self, chunks: List[Dict[str, Any]]) -> bool:
+    async def add_document_chunks(self, chunks: list[dict[str, Any]]) -> bool:
         """Add document chunks to vector store"""
         try:
             # Extract text content for embedding
@@ -386,8 +387,8 @@ class VectorService:
             return False
 
     async def search_documents(
-        self, query: str, top_k: int = 5, filters: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+        self, query: str, top_k: int = 5, filters: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """Search for relevant document chunks"""
         try:
             # Generate query embedding
