@@ -1,0 +1,42 @@
+name: Groundedness Eval
+
+# Weekly + on-demand gold-set evaluation. Spends OpenAI tokens, so it
+# never runs on ordinary pushes. Requires an ingested corpus: points at
+# the same database the deployed backend uses (read-mostly workload).
+
+on:
+  schedule:
+    - cron: '0 12 * * 1'   # Mondays 07:00 America/Chicago
+  workflow_dispatch:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Run gold-set evaluation
+        env:
+          DATABASE_URL: ${{ secrets.EVAL_DATABASE_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ENVIRONMENT: eval
+        run: |
+          cd backend
+          python -m app.evals.runner
+
+      - name: Upload scorecard artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorecard
+          path: docs/evals/scorecard.md

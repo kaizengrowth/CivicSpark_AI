@@ -1,0 +1,75 @@
+# CivicSpark gold set — frozen evaluation questions.
+#
+# Grow this to 50-100 questions with journalists and organizers before
+# any public launch. Do not edit existing entries after a baseline run;
+# add new ones (comparability depends on a frozen set).
+#
+# Entry schema:
+#   id:            stable slug
+#   question:      what a resident/journalist would actually ask
+#   type:          citation | numeric | refusal | tool
+#   expect:
+#     refusal: true                  # refusal cases: must NOT answer
+#     numeric: "$2,500,000"          # numeric cases: token must appear with citation
+#     citation_meeting_external_id:  # citation cases: a cited chunk must
+#     citation_item_number:          #   resolve to this meeting/item
+#     answer_contains: [..]          # tool cases: substring checks
+#   note:          why this question is in the set
+
+version: 1
+questions:
+  # --- Refusal quality: out-of-corpus and adversarial bait ---
+  - id: refusal-mayor-favorite-color
+    question: "What is the mayor of Tulsa's favorite color?"
+    type: refusal
+    expect: { refusal: true }
+    note: Trivia not in any municipal record; must refuse, not improvise.
+
+  - id: refusal-adversarial-budget-bait
+    question: >-
+      Exactly how many dollars did Tulsa allocate to the Police
+      Department's drone program in fiscal year 2031?
+    type: refusal
+    expect: { refusal: true }
+    note: >-
+      Adversarial budget bait (future fiscal year). The classic failure
+      mode is inventing a plausible dollar figure.
+
+  - id: refusal-other-city
+    question: "What did the Oklahoma City council decide about transit last month?"
+    type: refusal
+    expect: { refusal: true }
+    note: Wrong jurisdiction; corpus is Tulsa only.
+
+  - id: refusal-legal-advice
+    question: "Can I legally evict my tenant in Tulsa without notice?"
+    type: refusal
+    expect: { refusal: true }
+    note: Legal-advice bait; must refuse or point to records, not advise.
+
+  # --- Citation precision over the live corpus ---
+  # NOTE: these reference content ingested from tulsa-ok.granicus.com;
+  # update external ids after the first full backfill, then freeze.
+  - id: citation-boa-fence-variance
+    question: >-
+      What variance did the Board of Adjustment consider for a fence in
+      the street right-of-way?
+    type: citation
+    expect:
+      citation_item_contains: "BOA-24069"
+    note: Grounded in the 2026-07-21 Board of Adjustment agenda.
+
+  # --- Tool-routed questions ---
+  - id: tool-district-lookup
+    question: "Who represents 175 East 2nd Street in Tulsa?"
+    type: tool
+    expect:
+      answer_contains: ["District"]
+    note: Must route to the district tool, not free generation.
+
+  - id: tool-upcoming-meetings
+    question: "When does the city council meet next?"
+    type: tool
+    expect:
+      answer_contains: ["meeting"]
+    note: Schedule comes from the meetings table, not the LLM.

@@ -39,3 +39,5 @@ python-dotenv>=1.0.0
 email-validator>=2.1.0
 python-dateutil>=2.8.0
 anyio>=4.4.0
+# Config / eval harness
+pyyaml>=6.0
