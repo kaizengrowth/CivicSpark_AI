@@ -1,35 +1,43 @@
 # Contributing to CivicSpark AI
 
-## Demo Repository Archive Notice
+CivicSpark AI is in active development as an evidence-first civic
+platform for Tulsa. Contributions are welcome.
 
-**This demo repository is archived as we transition to a new architecture.** The CivicSpark AI project continues in active development with a focus on cost-efficient infrastructure and core product features.
+## Ground rules
 
-## About This Repository
+The project's core commitments (see the
+[design notes](https://kaizencode.art/garden/citycamp-ai/)) are not up
+for negotiation in PRs:
 
-This repository represents our initial proof-of-concept that was developed through extensive consultation and UI testing with community organizations and city government offices in Tulsa. After successfully validating the platform and gathering critical user feedback, we are implementing a new version optimized for:
+1. **Search before chat** — every feature must work without the LLM;
+   AI layers sit on top of a browsable, linkable evidence layer.
+2. **Cite or refuse** — no generated claim ships without a citation to
+   a source chunk; numeric figures must appear verbatim in the cited
+   source. Refusal is the correct behavior when evidence is missing.
+3. **No silent staleness** — anything that fetches external data must
+   record success/failure in `scrape_runs` and surface breakage.
+4. **Human-gated outreach** — nothing sends email on a user's behalf
+   without an explicit human send step.
 
-- Cost-efficient architecture
-- Streamlined infrastructure
-- Core product features
-- Better scalability
+## Workflow
 
-## For Reference Only
+1. Fork, branch from `main`.
+2. `pre-commit install` (ruff, mypy, eslint, bandit, gitleaks).
+3. Backend: `pytest tests/backend/` must pass; add fixture-pinned
+   tests for any parser changes.
+4. Frontend: `npm run lint && npm run type-check && npm test`.
+5. Changes to retrieval, generation, or verification should include a
+   gold-set run (`python -m app.evals.runner`) and mention scorecard
+   deltas in the PR.
 
-You may use this archived demo repository for:
-- Forking for learning purposes
-- Using code snippets in your own projects (subject to the MIT License)
-- Referencing the architecture and implementation patterns
-- Studying the codebase for educational purposes
+## Reporting issues
 
-## Ongoing Project
-
-While this demo repository is archived, the CivicSpark AI project remains active. For information about contributing to the ongoing project or learning more about the new architecture, please contact us directly.
-
-## Contact
-
-For questions about this archived demo repository or the ongoing CivicSpark AI project:
-kaitlin.cort@owasp.org
+Wrong answers, stale content, or missing documents are product
+signals, not just bugs — please include the query, the answer, and the
+expected source document if you have it.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT — see the LICENSE file.
+
+**Contact:** kaitlin.cort@owasp.org
