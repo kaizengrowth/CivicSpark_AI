@@ -469,7 +469,9 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
                             formatted_results += f"**{i}. {title}**\n"
 
                         details = []
-                        if metadata.get("document_type"):
+                        if metadata.get("section_title"):
+                            details.append(metadata["section_title"])
+                        elif metadata.get("document_type"):
                             details.append(metadata["document_type"])
                         if metadata.get("category"):
                             details.append(metadata["category"])
@@ -479,6 +481,19 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
                             )
                         if details:
                             formatted_results += f"*{' · '.join(details)}*\n"
+
+                        # Deep link to the meeting record when the chunk
+                        # carries legislative identity.
+                        if metadata.get("meeting_id"):
+                            item_ref = (
+                                f" (item {metadata['item_number']})"
+                                if metadata.get("item_number")
+                                else ""
+                            )
+                            formatted_results += (
+                                f"[View meeting record{item_ref}]"
+                                f"(/meetings?meeting={metadata['meeting_id']})\n"
+                            )
 
                         formatted_results += f"> {content[:300]}...\n\n"
 
