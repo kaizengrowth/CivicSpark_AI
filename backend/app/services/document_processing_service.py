@@ -1,12 +1,14 @@
 import asyncio
+import hashlib
 import logging
 import os
 import re
+import shutil
 import tempfile
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-import fitz  # PyMuPDF
 
 try:
     import magic
@@ -30,12 +32,10 @@ except ImportError:
     TIKTOKEN_AVAILABLE = False
     print("Warning: tiktoken not available, token counting will be limited")
 from app.core.config import Settings
+from app.core.llm import get_chat_client
 from app.models.document import Document, DocumentChunk
 from app.services.vector_service import VectorService
 from docx import Document as DocxDocument
-
-# AI and NLP imports
-from openai import OpenAI
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -46,11 +46,7 @@ class DocumentProcessor:
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.openai_client = (
-            OpenAI(api_key=settings.openai_api_key)
-            if settings.is_openai_configured
-            else None
-        )
+        self.openai_client, self.chat_model = get_chat_client(settings)
         self.encoding = (
             tiktoken.get_encoding("cl100k_base") if TIKTOKEN_AVAILABLE else None
         )  # GPT-4 encoding
@@ -99,29 +95,7 @@ class DocumentProcessor:
             logger.warning(f"pdfplumber failed for {file_path}: {e}")
 
         try:
-            # Method 2: Try PyMuPDF (good for complex layouts)
-            doc = fitz.open(file_path)
-            pages = []
-            for page_num in range(doc.page_count):
-                page = doc[page_num]
-                page_text = page.get_text()
-                if page_text.strip():
-                    pages.append(page_text)
-
-            if pages:
-                text = "\n\n".join(pages)
-                metadata["page_count"] = doc.page_count
-                metadata["extraction_method"] = "pymupdf"
-                doc.close()
-                return text, metadata
-
-            doc.close()
-
-        except Exception as e:
-            logger.warning(f"PyMuPDF failed for {file_path}: {e}")
-
-        try:
-            # Method 3: Fallback to pypdf
+            # Method 2: Fallback to pypdf
             with open(file_path, "rb") as file:
                 pdf_reader = pypdf.PdfReader(file)
                 pages = []
@@ -363,7 +337,7 @@ class DocumentProcessor:
                 text = text[:max_chars] + "..."
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model=self.chat_model,
                 messages=[
                     {
                         "role": "system",
@@ -396,7 +370,7 @@ class DocumentProcessor:
                 text = text[:max_chars] + "..."
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model=self.chat_model,
                 messages=[
                     {
                         "role": "system",
@@ -415,6 +389,15 @@ class DocumentProcessor:
             return ""
 
 
+def _sha256_file(file_path: str) -> str:
+    """Content hash of a source file, for provenance and dedup"""
+    digest = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 class DocumentProcessingService:
     """Main service for processing documents and adding them to RAG system"""
 
@@ -422,13 +405,29 @@ class DocumentProcessingService:
         self.settings = settings
         self.db = db
         self.processor = DocumentProcessor(settings)
-        self.vector_service = VectorService(settings)
+        self.vector_service = VectorService(settings, db)
 
     async def process_document(
         self, file_path: str, document_data: Dict[str, Any]
     ) -> Optional[Document]:
         """Process a document file and add it to the database and vector store"""
         try:
+            # Provenance first: hash the source so re-uploads of unchanged
+            # files are deduplicated and every document records what was
+            # ingested and when.
+            content_hash = _sha256_file(file_path)
+            existing = (
+                self.db.query(Document)
+                .filter(Document.content_hash == content_hash)
+                .first()
+            )
+            if existing is not None:
+                logger.info(
+                    f"Skipping ingest: identical content already indexed as "
+                    f"document {existing.id}"
+                )
+                return existing
+
             # Detect file type
             mime_type = self.processor.detect_file_type(file_path)
 
@@ -448,6 +447,10 @@ class DocumentProcessingService:
             summary = await self.processor.generate_summary(cleaned_text[:4000])
             keywords = await self.processor.extract_keywords(cleaned_text[:3000])
 
+            # Persist the original file: callers pass a temp path that is
+            # deleted after upload, so keep our own copy for reprocessing.
+            stored_path = self._store_file(file_path)
+
             # Create document record
             document = Document(
                 title=document_data.get("title", Path(file_path).stem),
@@ -456,7 +459,9 @@ class DocumentProcessingService:
                 document_type=document_data.get("document_type", "unknown"),
                 category=document_data.get("category", ""),
                 source_url=document_data.get("source_url", ""),
-                file_path=file_path,
+                content_hash=content_hash,
+                retrieved_at=datetime.now(timezone.utc),
+                file_path=stored_path,
                 file_name=Path(file_path).name,
                 file_size=os.path.getsize(file_path),
                 mime_type=mime_type,
@@ -489,7 +494,6 @@ class DocumentProcessingService:
                     word_count=chunk_data["word_count"],
                     start_char=chunk_data["start_char"],
                     end_char=chunk_data["end_char"],
-                    embedding_model="text-embedding-3-small",
                 )
 
                 self.db.add(chunk)
@@ -534,6 +538,19 @@ class DocumentProcessingService:
                 self.db.commit()
 
             return None
+
+    def _store_file(self, file_path: str) -> str:
+        """Copy an uploaded file into the configured storage directory"""
+        try:
+            storage_dir = Path(self.settings.storage_dir) / "documents"
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            suffix = Path(file_path).suffix
+            destination = storage_dir / f"{uuid.uuid4().hex}{suffix}"
+            shutil.copy2(file_path, destination)
+            return str(destination)
+        except Exception as e:
+            logger.warning(f"Could not store original file {file_path}: {e}")
+            return file_path
 
     async def reprocess_document(self, document_id: int) -> bool:
         """Reprocess an existing document"""

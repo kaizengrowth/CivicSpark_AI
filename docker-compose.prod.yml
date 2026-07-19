@@ -1,26 +1,30 @@
 version: '3.8'
 
+# Self-hosted production stack (alternative to Render + Vercel).
+# Same shape as development: one database, one API.
+
 services:
-  # Backend API (Production)
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    container_name: citycamp_backend_prod
+    container_name: civicspark_backend_prod
     environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/citycamp_db
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=${SECRET_KEY:-production-secret-key-change-me}
+      - DATABASE_URL=postgresql://user:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/citycamp_db
+      - SECRET_KEY=${SECRET_KEY:?set SECRET_KEY}
       - ENVIRONMENT=production
       - DEBUG=False
+      - STORAGE_DIR=/app/storage
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     ports:
-      - "8000:8000"  # Expose on port 8000 for load balancer
+      - "8000:8000"
+    volumes:
+      - backend_storage:/app/storage
     depends_on:
       - postgres
-      - redis
     networks:
-      - citycamp_network
+      - civicspark_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -28,59 +32,23 @@ services:
       timeout: 10s
       retries: 3
 
-  # PostgreSQL Database (Production)
   postgres:
-    image: postgres:15-alpine
-    container_name: citycamp_postgres_prod
+    image: pgvector/pgvector:pg16
+    container_name: civicspark_postgres_prod
     environment:
       POSTGRES_DB: citycamp_db
       POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - citycamp_network
-    restart: unless-stopped
-
-  # Redis for Celery (Production)
-  redis:
-    image: redis:7-alpine
-    container_name: citycamp_redis_prod
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - citycamp_network
-    restart: unless-stopped
-
-  # Celery Worker (Production)
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
-    container_name: citycamp_celery_worker_prod
-    command: celery -A app.celery worker --loglevel=info
-    environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/citycamp_db
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=${SECRET_KEY:-production-secret-key-change-me}
-      - ENVIRONMENT=production
-      - DEBUG=False
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - citycamp_network
+      - civicspark_network
     restart: unless-stopped
 
 volumes:
   postgres_data:
-  redis_data:
+  backend_storage:
 
 networks:
-  citycamp_network:
+  civicspark_network:
     driver: bridge

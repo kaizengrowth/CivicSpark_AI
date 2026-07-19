@@ -6,16 +6,14 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
-import fitz  # PyMuPDF for better PDF text extraction
-
 # PDF processing
+import pdfplumber
 import pypdf
 from app.core.config import settings
 from app.models.meeting import MeetingCategory
 
 # AI/ML imports
-from openai import OpenAI
-from PIL import Image
+from app.core.llm import get_chat_client
 from pydantic import BaseModel, Field
 
 # Database imports
@@ -529,14 +527,9 @@ class AICategorization:
 
     def __init__(self):
         """Initialize the AI categorization service"""
-        api_key = settings.openai_api_key
-        if not api_key:
-            logger.warning(
-                "OpenAI API key not configured. AI features will be limited."
-            )
-            self.openai_client = None
-        else:
-            self.openai_client = OpenAI(api_key=api_key)
+        self.openai_client, self.model = get_chat_client(settings)
+        if self.openai_client is None:
+            logger.warning("No LLM configured. AI features will be limited.")
 
     @classmethod
     def get_category_definitions(cls) -> Dict[str, CategoryDefinition]:
@@ -580,18 +573,20 @@ class AICategorization:
             db.rollback()
 
     def extract_text_from_pdf(self, pdf_content: bytes) -> str:
-        """Extract text from PDF content using PyMuPDF for better accuracy"""
+        """Extract text from PDF bytes using pdfplumber with a pypdf fallback"""
         try:
-            # Try PyMuPDF first (better text extraction)
-            pdf_document = fitz.open(stream=pdf_content, filetype="pdf")
-            text = ""
-            for page_num in range(pdf_document.page_count):
-                page = pdf_document[page_num]
-                text += page.get_text() + "\n"
-            pdf_document.close()
-            return text
+            # Try pdfplumber first (best text extraction for structured PDFs)
+            with pdfplumber.open(io.BytesIO(pdf_content)) as pdf:
+                text = ""
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+            if text.strip():
+                return text
+            raise ValueError("pdfplumber extracted no text")
         except Exception as e:
-            logger.warning(f"PyMuPDF failed, falling back to pypdf: {str(e)}")
+            logger.warning(f"pdfplumber failed, falling back to pypdf: {str(e)}")
             # Fallback to pypdf
             try:
                 pdf_reader = pypdf.PdfReader(io.BytesIO(pdf_content))
@@ -671,7 +666,7 @@ class AICategorization:
             """
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-4",  # Upgrade to GPT-4 for better accuracy
+                model=self.model,
                 messages=[
                     {
                         "role": "system",
@@ -1205,9 +1200,11 @@ class AICategorization:
                 },
             ]
 
-            # Call OpenAI Vision API
+            # Call the vision-capable chat API. Requires a multimodal model
+            # (e.g. meta-llama/llama-4-scout-17b-16e-instruct on Groq, or a
+            # GPT-4-class model on the legacy OpenAI fallback).
             response = self.openai_client.chat.completions.create(
-                model="gpt-4-vision-preview",
+                model=self.model,
                 messages=messages,
                 max_tokens=2000,
                 temperature=0.1,

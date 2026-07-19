@@ -31,15 +31,16 @@ async def get_chatbot_status(settings: Settings = Depends(get_settings)):
     """
     Get chatbot configuration status
     """
+    chat_config = settings.chat_llm
     return {
-        "openai_configured": settings.is_openai_configured,
-        "model": "gpt-4.1",
+        "llm_configured": settings.is_llm_configured,
+        "model": chat_config["model"] if chat_config else None,
         "features": {
             "web_search": bool(settings.google_api_key and settings.google_cse_id),
             "document_retrieval": True,
             "function_calling": True,
         },
-        "status": "ready" if settings.is_openai_configured else "degraded",
+        "status": "ready" if settings.is_llm_configured else "degraded",
     }
 
 

@@ -3,28 +3,26 @@ import logging
 from typing import Dict, List, Tuple
 
 from app.core.config import settings
+from app.core.llm import get_chat_client
 from app.services.ai_categorization_service import (
     AICategorization as BaseAICategorization,
 )
 from app.services.ai_categorization_service import ProcessedMeetingContent, VotingRecord
-from openai import OpenAI
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 
 class AICategorizationGPT5(BaseAICategorization):
-    """Experimental GPT-5 powered categorization with stricter prompts.
+    """Experimental categorization variant with stricter JSON-only prompts.
 
-    This class is additive and does not modify the existing base implementation.
+    This class is additive and does not modify the existing base
+    implementation. It uses the configured LLM provider like everything else.
     """
 
     def __init__(self) -> None:
         super().__init__()
-        if settings.openai_api_key:
-            self.openai_client = OpenAI(api_key=settings.openai_api_key)
-        else:
-            self.openai_client = None
+        self.openai_client, self.model = get_chat_client(settings)
 
     def categorize_content_with_ai(
         self, content: str
@@ -86,7 +84,7 @@ Rules:
 """
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-5",
+                model=self.model,
                 messages=[
                     {
                         "role": "system",

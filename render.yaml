@@ -1,6 +1,9 @@
-# Render Blueprint for CivicSpark AI Backend
-# Deploy: Connect repo at https://dashboard.render.com/select-repo?type=blueprint
+# Render Blueprint for the CivicSpark AI backend
+# Deploy: connect this repo at https://dashboard.render.com/select-repo?type=blueprint
 # Docs: https://render.com/docs/blueprint-spec
+#
+# One web service + one Postgres database. Postgres is the only stateful
+# service: it holds relational data and the RAG vector index (pgvector).
 
 services:
   - type: web
@@ -9,6 +12,7 @@ services:
     dockerfilePath: ./backend/Dockerfile.prod
     dockerContext: ./backend
     plan: free
+    healthCheckPath: /health
 
     envVars:
       - key: ENVIRONMENT
@@ -21,12 +25,36 @@ services:
           property: connectionString
       - key: SECRET_KEY
         generateValue: true
+      # LLM provider: defaults to Llama on Groq's free tier. Any
+      # OpenAI-compatible endpoint works (OpenRouter, Together, ...).
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: LLM_MODEL
+        value: llama-3.3-70b-versatile
+      # Embeddings (Groq has none; Jina free tier by default)
+      - key: EMBEDDING_API_KEY
+        sync: false
+      - key: EMBEDDING_BASE_URL
+        value: https://api.jina.ai/v1
+      - key: EMBEDDING_MODEL
+        value: jina-embeddings-v3
+      - key: EMBEDDING_DIMENSIONS
+        value: "1024"
+      # Legacy fallback provider (leave empty when using LLM_API_KEY)
       - key: OPENAI_API_KEY
         sync: false
       - key: GEOCODIO_API_KEY
         sync: false
-      - key: REDIS_URL
-        value: redis://localhost:6379
+      - key: STORAGE_BACKEND
+        value: local
+      - key: STORAGE_DIR
+        value: /app/storage
+      # Only needed if the frontend calls the API cross-origin (i.e. not via
+      # the Vercel /api rewrite). Set to your deployed frontend origin(s).
+      - key: CORS_ORIGINS
+        sync: false
 
 databases:
   - name: civicspark-db

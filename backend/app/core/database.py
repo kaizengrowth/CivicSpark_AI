@@ -1,8 +1,10 @@
-import os
+import logging
 
 from app.core.config import settings
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
+
+logger = logging.getLogger(__name__)
 
 # Database connection
 DATABASE_URL = settings.database_url
@@ -39,6 +41,55 @@ def create_tables():
     Create database tables
     """
     Base.metadata.create_all(bind=engine)
+
+
+def ensure_pgvector() -> bool:
+    """Enable pgvector-backed search if the database supports it.
+
+    Idempotent: safe to run on every startup. Mirrors alembic migration 005
+    for deployments that bootstrap the schema via create_tables() instead of
+    running migrations. Returns True when the vector column is available.
+    """
+    if engine.dialect.name != "postgresql":
+        return False
+
+    # Dimension follows the configured embedding provider. Switching
+    # providers with a different dimension requires dropping the embedding
+    # column and re-embedding the corpus.
+    dimensions = (settings.embedding_llm or {}).get("dimensions", 1536)
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.execute(
+                text(
+                    "ALTER TABLE document_chunks "
+                    f"ADD COLUMN IF NOT EXISTS embedding vector({dimensions})"
+                )
+            )
+            conn.execute(
+                text(
+                    "UPDATE document_chunks "
+                    "SET embedding = CAST(embedding_vector::text AS vector) "
+                    "WHERE embedding IS NULL AND embedding_vector IS NOT NULL"
+                )
+            )
+        # Index creation is best-effort; search works without it.
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_document_chunks_embedding "
+                        "ON document_chunks USING hnsw (embedding vector_cosine_ops)"
+                    )
+                )
+        except Exception as e:
+            logger.warning(f"Could not create HNSW index (search still works): {e}")
+        logger.info("pgvector enabled for document search")
+        return True
+    except Exception as e:
+        logger.info(f"pgvector unavailable, using in-process similarity: {e}")
+        return False
 
 
 # For testing purposes - drop all tables

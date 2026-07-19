@@ -7,9 +7,17 @@ import os
 from pathlib import Path
 from typing import BinaryIO, List, Optional
 
-import boto3
 from app.core.config import Settings
-from botocore.exceptions import ClientError, NoCredentialsError
+
+try:
+    import boto3
+    from botocore.exceptions import ClientError, NoCredentialsError
+
+    BOTO3_AVAILABLE = True
+except ImportError:
+    boto3 = None
+    ClientError = NoCredentialsError = Exception
+    BOTO3_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +30,13 @@ class S3Service:
         self.bucket_name = settings.aws_s3_bucket
         self.region = settings.aws_region
 
-        # Initialize S3 client
+        # Initialize S3 client only when boto3 is installed and S3 is the
+        # chosen backend; local filesystem storage is the default.
+        if not BOTO3_AVAILABLE or settings.storage_backend != "s3":
+            self.s3_client = None
+            self.is_configured = False
+            return
+
         try:
             if settings.aws_access_key_id and settings.aws_secret_access_key:
                 self.s3_client = boto3.client(
@@ -176,9 +190,7 @@ class MeetingImageService:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.s3_service = S3Service(settings)
-        self.use_s3 = (
-            settings.environment == "production" or settings.aws_s3_bucket is not None
-        )
+        self.use_s3 = settings.storage_backend == "s3"
 
     def get_image_urls(
         self, meeting_date: str, pdf_filename: str, local_dir: str
@@ -237,7 +249,7 @@ class MeetingImageService:
         if local_images_dir.exists():
             # Convert local path to API path
             # Remove the base storage path to get relative path
-            base_storage = Path("backend/storage/meeting-images")
+            base_storage = Path(self.settings.storage_dir) / "meeting-images"
             try:
                 relative_path = local_images_dir.relative_to(base_storage)
 

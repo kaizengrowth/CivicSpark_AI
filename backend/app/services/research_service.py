@@ -11,8 +11,16 @@ import pypdf
 import requests
 from app.core.config import Settings
 from bs4 import BeautifulSoup
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+
+try:
+    from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
+
+    GOOGLE_SEARCH_AVAILABLE = True
+except ImportError:
+    build = None
+    HttpError = Exception
+    GOOGLE_SEARCH_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +37,11 @@ class ResearchService:
         self, query: str, num_results: int = 5
     ) -> List[Dict[str, Any]]:
         """Search the web using Google Custom Search API"""
-        if not self.google_api_key or not self.google_cse_id:
+        if (
+            not GOOGLE_SEARCH_AVAILABLE
+            or not self.google_api_key
+            or not self.google_cse_id
+        ):
             logger.warning("Google Custom Search API not configured")
             return []
 
