@@ -101,6 +101,18 @@ class MeetingUpsertService:
             # Create/recreate agenda items
             MeetingUpsertService._create_agenda_items(db, meeting.id, processed_content)
 
+            # Ingest-time watch matching: queue deep-link-first alerts for
+            # subscribers the moment a meeting lands, instead of waiting
+            # for the nightly poll. Never allowed to break ingestion.
+            if is_new:
+                try:
+                    from app.core.config import settings
+                    from app.services.watch_service import WatchService
+
+                    WatchService(settings).queue_matches(db, meeting)
+                except Exception as e:
+                    logger.warning(f"Watch matching failed for {external_id}: {e}")
+
             return meeting, is_new
 
         except IntegrityError as e:

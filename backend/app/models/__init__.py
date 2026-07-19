@@ -12,6 +12,7 @@ from .document import (
     DocumentCollection,
     DocumentCollectionMembership,
 )
+from .feedback import ChatFeedback
 from .meeting import AgendaItem, Meeting, MeetingCategory
 from .notification import Notification, NotificationPreference, NotificationTemplate
 from .notification_preferences import NotificationPreferences
@@ -20,6 +21,7 @@ from .user import User, UserInterests
 
 __all__ = [
     "BudgetLine",
+    "ChatFeedback",
     "User",
     "UserInterests",
     "Meeting",

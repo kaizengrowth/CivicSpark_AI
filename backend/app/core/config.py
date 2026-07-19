@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     # Comma-separated list, e.g. "https://civicspark.vercel.app,https://civicspark.org"
     cors_origins: str = ""
 
+    # Public frontend origin, used to build absolute deep links in
+    # notifications (e.g. https://civicspark.vercel.app). Empty = relative.
+    frontend_url: str = ""
+
     # RAG Configuration
     enable_rag: bool = True
     # Second-pass claim verification on tool-grounded answers (refuse > invent)

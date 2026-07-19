@@ -108,6 +108,26 @@ corpus (the pgvector column is sized from config on fresh databases).
   corpus coverage. The platform serves residents' right to know, not the
   city's narrative.
 
+## Watches & feedback (Iteration 3)
+
+- **Ingest-time matching** (`app/services/watch_service.py`): the moment a
+  new meeting is upserted, active confirmed subscriptions are matched
+  dual-track — item-level keyword hits outrank topic-label hits, which
+  outrank bare meeting-type interest — and notifications are queued per
+  channel with dedup. Matching never blocks ingestion.
+- **Deep link first**: every alert leads with the meeting deep link
+  (`/meetings?meeting=<id>`); matched item titles next; the AI summary is
+  optional extra, never the only content.
+- **Consent**: one-click unsubscribe via HMAC-signed expiring tokens
+  (`app/core/tokens.py`, `GET /subscriptions/unsubscribe?token=...`) in
+  every message — no login, no enumerable IDs. Quiet hours, digest mode,
+  and per-day caps live on the subscription and are honored at dispatch.
+  Zero auto-sends anywhere in the platform.
+- **Feedback review queue** (`chat_feedback`, `POST /chatbot/feedback`):
+  every thumbs-down is a work item tagged with its routed intent; the
+  admin queue (`GET /chatbot/feedback?reviewed=false`) is the product
+  backlog — each miss becomes a corpus, prompt, or tool fix.
+
 ## Schema setup
 
 Fresh databases bootstrap via `create_tables()` (SQLAlchemy `create_all`) at
@@ -124,7 +144,7 @@ limitation inherited from the PoC.)
 |---|---|---|
 | 1 — Evidence layer | provenance, hybrid index, item-level parsing, deep links | **shipped** on this branch (vendor-adapter hardening for TGOV/Granicus feeds remains ongoing) |
 | 2 — Grounded Q&A | intent routing, rerank, claim verification, budget tools, gold eval set | **largely shipped**: intent router, budget tools, agent loop, claim verification, contested-issue policy, eval harness seed. Remaining: cross-encoder rerank, gold set expansion from research-day transcripts |
-| 3 — Watches & outreach | ingest-time watch matching, deep-link-first alerts, consent hardening | PoC subscriptions exist; precision work pending |
+| 3 — Watches & outreach | ingest-time watch matching, deep-link-first alerts, consent hardening | **largely shipped**: dual-track matching at ingest, deep-link-first messages, signed one-click unsubscribe, feedback review queue. Remaining: digest dispatch loop, alert-retention metrics |
 | 4 — Matters graph | track legislative matters across meetings; optional media | not started |
 
 The failure modes in the design sketch are the acceptance tests: if budget
