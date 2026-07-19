@@ -6,16 +6,14 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
-import fitz  # PyMuPDF for better PDF text extraction
-
 # PDF processing
+import pdfplumber
 import pypdf
 from app.core.config import settings
 from app.models.meeting import MeetingCategory
 
 # AI/ML imports
 from openai import OpenAI
-from PIL import Image
 from pydantic import BaseModel, Field
 
 # Database imports
@@ -580,18 +578,20 @@ class AICategorization:
             db.rollback()
 
     def extract_text_from_pdf(self, pdf_content: bytes) -> str:
-        """Extract text from PDF content using PyMuPDF for better accuracy"""
+        """Extract text from PDF bytes using pdfplumber with a pypdf fallback"""
         try:
-            # Try PyMuPDF first (better text extraction)
-            pdf_document = fitz.open(stream=pdf_content, filetype="pdf")
-            text = ""
-            for page_num in range(pdf_document.page_count):
-                page = pdf_document[page_num]
-                text += page.get_text() + "\n"
-            pdf_document.close()
-            return text
+            # Try pdfplumber first (best text extraction for structured PDFs)
+            with pdfplumber.open(io.BytesIO(pdf_content)) as pdf:
+                text = ""
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+            if text.strip():
+                return text
+            raise ValueError("pdfplumber extracted no text")
         except Exception as e:
-            logger.warning(f"PyMuPDF failed, falling back to pypdf: {str(e)}")
+            logger.warning(f"pdfplumber failed, falling back to pypdf: {str(e)}")
             # Fallback to pypdf
             try:
                 pdf_reader = pypdf.PdfReader(io.BytesIO(pdf_content))

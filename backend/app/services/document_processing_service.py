@@ -2,11 +2,11 @@ import asyncio
 import logging
 import os
 import re
+import shutil
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-import fitz  # PyMuPDF
 
 try:
     import magic
@@ -99,29 +99,7 @@ class DocumentProcessor:
             logger.warning(f"pdfplumber failed for {file_path}: {e}")
 
         try:
-            # Method 2: Try PyMuPDF (good for complex layouts)
-            doc = fitz.open(file_path)
-            pages = []
-            for page_num in range(doc.page_count):
-                page = doc[page_num]
-                page_text = page.get_text()
-                if page_text.strip():
-                    pages.append(page_text)
-
-            if pages:
-                text = "\n\n".join(pages)
-                metadata["page_count"] = doc.page_count
-                metadata["extraction_method"] = "pymupdf"
-                doc.close()
-                return text, metadata
-
-            doc.close()
-
-        except Exception as e:
-            logger.warning(f"PyMuPDF failed for {file_path}: {e}")
-
-        try:
-            # Method 3: Fallback to pypdf
+            # Method 2: Fallback to pypdf
             with open(file_path, "rb") as file:
                 pdf_reader = pypdf.PdfReader(file)
                 pages = []
@@ -422,7 +400,7 @@ class DocumentProcessingService:
         self.settings = settings
         self.db = db
         self.processor = DocumentProcessor(settings)
-        self.vector_service = VectorService(settings)
+        self.vector_service = VectorService(settings, db)
 
     async def process_document(
         self, file_path: str, document_data: Dict[str, Any]
@@ -448,6 +426,10 @@ class DocumentProcessingService:
             summary = await self.processor.generate_summary(cleaned_text[:4000])
             keywords = await self.processor.extract_keywords(cleaned_text[:3000])
 
+            # Persist the original file: callers pass a temp path that is
+            # deleted after upload, so keep our own copy for reprocessing.
+            stored_path = self._store_file(file_path)
+
             # Create document record
             document = Document(
                 title=document_data.get("title", Path(file_path).stem),
@@ -456,7 +438,7 @@ class DocumentProcessingService:
                 document_type=document_data.get("document_type", "unknown"),
                 category=document_data.get("category", ""),
                 source_url=document_data.get("source_url", ""),
-                file_path=file_path,
+                file_path=stored_path,
                 file_name=Path(file_path).name,
                 file_size=os.path.getsize(file_path),
                 mime_type=mime_type,
@@ -534,6 +516,19 @@ class DocumentProcessingService:
                 self.db.commit()
 
             return None
+
+    def _store_file(self, file_path: str) -> str:
+        """Copy an uploaded file into the configured storage directory"""
+        try:
+            storage_dir = Path(self.settings.storage_dir) / "documents"
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            suffix = Path(file_path).suffix
+            destination = storage_dir / f"{uuid.uuid4().hex}{suffix}"
+            shutil.copy2(file_path, destination)
+            return str(destination)
+        except Exception as e:
+            logger.warning(f"Could not store original file {file_path}: {e}")
+            return file_path
 
     async def reprocess_document(self, document_id: int) -> bool:
         """Reprocess an existing document"""
