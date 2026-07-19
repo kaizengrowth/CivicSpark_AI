@@ -93,7 +93,7 @@ async def citycamp_exception_handler(
         error=exc.message, error_code=exc.error_code, details=exc.details
     )
 
-    return JSONResponse(status_code=exc.status_code, content=error_response.dict())
+    return JSONResponse(status_code=exc.status_code, content=error_response.model_dump(mode="json"))
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -102,7 +102,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 
     error_response = ErrorResponse(error=exc.detail, error_code="HTTP_ERROR")
 
-    return JSONResponse(status_code=exc.status_code, content=error_response.dict())
+    return JSONResponse(status_code=exc.status_code, content=error_response.model_dump(mode="json"))
 
 
 async def validation_exception_handler(
@@ -118,7 +118,7 @@ async def validation_exception_handler(
     )
 
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=error_response.dict()
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=error_response.model_dump(mode="json")
     )
 
 
@@ -131,5 +131,5 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     )
 
     return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content=error_response.dict()
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content=error_response.model_dump(mode="json")
     )
