@@ -20,7 +20,7 @@ from app.services.document_processing_service import DocumentProcessingService
 from app.services.vector_service import VectorService
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -337,7 +337,7 @@ async def get_document_stats(db: Session = Depends(get_db)):
 
     # Count by type
     type_counts = (
-        db.query(Document.document_type, db.func.count(Document.id))
+        db.query(Document.document_type, func.count(Document.id))
         .filter(Document.is_public == True)
         .group_by(Document.document_type)
         .all()
@@ -345,15 +345,24 @@ async def get_document_stats(db: Session = Depends(get_db)):
 
     # Count by category
     category_counts = (
-        db.query(Document.category, db.func.count(Document.id))
+        db.query(Document.category, func.count(Document.id))
         .filter(and_(Document.is_public == True, Document.category != ""))
         .group_by(Document.category)
         .all()
     )
 
+    # "Index as of": the newest retrieval timestamp in the public corpus,
+    # so the UI can show how fresh answers can possibly be.
+    index_as_of = (
+        db.query(func.max(Document.retrieved_at))
+        .filter(Document.is_public == True)
+        .scalar()
+    )
+
     return {
         "total_documents": total_docs,
         "processed_documents": processed_docs,
+        "index_as_of": index_as_of.isoformat() if index_as_of else None,
         "processing_rate": (
             round(processed_docs / total_docs * 100, 1) if total_docs > 0 else 0
         ),

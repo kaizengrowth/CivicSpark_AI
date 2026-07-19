@@ -30,6 +30,10 @@ class Document(Base):
     )  # budget, legislation, policy, meeting_minutes, etc.
     category = Column(String(100), index=True)  # transportation, housing, finance, etc.
     source_url = Column(String(1000))  # Original document URL
+
+    # Provenance: never index without knowing what was fetched and when.
+    content_hash = Column(String(64), index=True)  # sha256 of the source file
+    retrieved_at = Column(DateTime(timezone=True))  # when the source was fetched
     file_path = Column(String(1000))  # Local file storage path
     file_name = Column(String(500))
     file_size = Column(Integer)  # Size in bytes
