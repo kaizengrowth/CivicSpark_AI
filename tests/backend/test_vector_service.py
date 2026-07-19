@@ -68,6 +68,7 @@ async def test_add_chunks_persists_embeddings(db_session, vector_service):
     vector_service.embedding_service.generate_embeddings = AsyncMock(
         return_value=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
     )
+    vector_service.embedding_service.model = "test-embedding-model"
 
     ok = await vector_service.add_document_chunks(
         [
@@ -84,7 +85,7 @@ async def test_add_chunks_persists_embeddings(db_session, vector_service):
     )
     assert rows[0].embedding_vector == [1.0, 0.0, 0.0]
     assert rows[1].embedding_vector == [0.0, 1.0, 0.0]
-    assert rows[0].embedding_model == "text-embedding-3-small"
+    assert rows[0].embedding_model == "test-embedding-model"
 
 
 @pytest.mark.asyncio
