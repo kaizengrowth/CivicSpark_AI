@@ -3,16 +3,19 @@ import logging
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import hmac
 
 import httpx
 from app.core.config import Settings, get_settings
 from app.core.database import get_db
+from app.models.comment import MeetingComment
 from app.models.document import DocumentChunk
 from app.models.meeting import AgendaItem, Meeting, MeetingCategory
 from app.models.transcript import TranscriptSegment
+from app.models.user import User
+from app.services.auth import get_current_active_user, get_current_admin_user
 from app.schemas.base import PaginationParams, StandardListResponse
 from app.schemas.meeting import (
     AgendaItemResponse,
@@ -26,7 +29,7 @@ from app.services.ai_categorization_service import AICategorization
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import Text, cast
 from sqlalchemy.orm import Session
 
@@ -322,6 +325,7 @@ class TranscriptSegmentIn(BaseModel):
     start: float
     end: float
     text: str
+    translations: Optional[Dict[str, str]] = None
 
 
 class TranscriptUpload(BaseModel):
@@ -378,6 +382,7 @@ async def upload_transcript(
                 start_seconds=segment.start,
                 end_seconds=segment.end,
                 text=segment.text.strip(),
+                translations=segment.translations or {},
                 source_model=payload.source_model,
             )
         )
@@ -397,6 +402,9 @@ async def upload_transcript(
 async def get_transcript(
     meeting_id: int,
     q: Optional[str] = Query(None, description="Filter segments by text"),
+    lang: Optional[str] = Query(
+        None, description="Preferred language, e.g. 'es' (falls back to original)"
+    ),
     limit: int = Query(500, ge=1, le=2000),
     db: Session = Depends(get_db),
 ):
@@ -420,22 +428,224 @@ async def get_transcript(
         # also accept an explicit start position.
         return f"{meeting.video_url}#t={int(start)}"
 
+    languages = sorted(
+        {
+            code
+            for segment in segments
+            for code in (segment.translations or {}).keys()
+        }
+    )
+
     return {
         "meeting_id": meeting_id,
         "video_url": meeting.video_url,
         "segment_count": len(segments),
         "source_model": segments[0].source_model if segments else None,
+        "languages": languages,
         "segments": [
             {
                 "index": segment.segment_index,
                 "start": segment.start_seconds,
                 "end": segment.end_seconds,
                 "text": segment.text,
+                "translated": (
+                    (segment.translations or {}).get(lang) if lang else None
+                ),
                 "video_link": video_link(segment.start_seconds),
             }
             for segment in segments
         ],
     }
+
+
+class MeetingAnalysis(BaseModel):
+    """Transcript-derived analysis, produced by the media pipeline"""
+
+    summary: Optional[str] = None
+    detailed_summary: Optional[str] = None
+    topics: List[str] = []
+    keywords: List[str] = []
+
+
+@router.post("/{meeting_id}/analysis")
+async def upload_analysis(
+    meeting_id: int,
+    payload: MeetingAnalysis,
+    x_ingest_token: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """Store transcript-derived analysis into the platform's categories.
+
+    Machine ingest (same token as transcripts). Topics/keywords merge
+    into the meeting's existing sets — the same taxonomy that drives
+    browse filters and watch subscriptions — and summaries only fill
+    empty fields, never overwrite human- or minutes-derived content.
+    """
+    _require_ingest_token(settings, x_ingest_token)
+
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    if payload.topics:
+        known = {
+            name.lower(): name
+            for (name,) in db.query(MeetingCategory.name).all()
+        }
+        merged = list(meeting.topics or [])
+        for topic in payload.topics:
+            canonical = known.get(topic.strip().lower())
+            if canonical and canonical not in merged:
+                merged.append(canonical)
+        meeting.topics = merged
+
+    if payload.keywords:
+        merged_keywords = list(meeting.keywords or [])
+        for keyword in payload.keywords:
+            cleaned = keyword.strip()
+            if cleaned and cleaned not in merged_keywords:
+                merged_keywords.append(cleaned)
+        meeting.keywords = merged_keywords[:50]
+
+    if payload.summary and not meeting.summary:
+        meeting.summary = payload.summary
+    if payload.detailed_summary and not meeting.detailed_summary:
+        meeting.detailed_summary = payload.detailed_summary
+
+    db.commit()
+    return {
+        "message": "Analysis stored",
+        "meeting_id": meeting_id,
+        "topics": meeting.topics,
+    }
+
+
+@router.get("/media/pending")
+async def list_pending_media(
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Recent meetings that have no transcript yet.
+
+    The daily media-sync workflow reads this list, matches it against
+    the Granicus video feed by date, and transcribes what's missing.
+    """
+    since = datetime.utcnow() - timedelta(days=days)
+    transcribed = db.query(TranscriptSegment.meeting_id).distinct().subquery()
+    meetings = (
+        db.query(Meeting)
+        .filter(
+            Meeting.meeting_date >= since,
+            ~Meeting.id.in_(transcribed.select()),
+        )
+        .order_by(Meeting.meeting_date.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "pending": [
+            {
+                "meeting_id": meeting.id,
+                "title": meeting.title,
+                "meeting_date": meeting.meeting_date,
+                "meeting_type": meeting.meeting_type,
+                "external_id": meeting.external_id,
+                "video_url": meeting.video_url,
+            }
+            for meeting in meetings
+        ]
+    }
+
+
+class CommentCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+    video_timestamp: Optional[float] = Field(None, ge=0)
+
+
+class CommentHide(BaseModel):
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+@router.get("/{meeting_id}/comments")
+async def list_comments(
+    meeting_id: int,
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """Visible comments on a meeting, oldest first"""
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    comments = (
+        db.query(MeetingComment)
+        .filter(
+            MeetingComment.meeting_id == meeting_id,
+            MeetingComment.is_hidden.is_(False),
+        )
+        .order_by(MeetingComment.created_at)
+        .limit(limit)
+        .all()
+    )
+    return {
+        "comments": [
+            {
+                "id": comment.id,
+                "display_name": comment.display_name or "Resident",
+                "content": comment.content,
+                "video_timestamp": comment.video_timestamp,
+                "created_at": comment.created_at,
+            }
+            for comment in comments
+        ],
+        "total": len(comments),
+    }
+
+
+@router.post("/{meeting_id}/comments")
+async def create_comment(
+    meeting_id: int,
+    payload: CommentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Post a comment (authenticated residents only; never anonymous spam)"""
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    comment = MeetingComment(
+        meeting_id=meeting_id,
+        user_id=current_user.id,
+        display_name=current_user.full_name or current_user.username,
+        content=payload.content.strip(),
+        video_timestamp=payload.video_timestamp,
+    )
+    db.add(comment)
+    db.commit()
+    return {"message": "Comment posted", "id": comment.id}
+
+
+@router.post("/comments/{comment_id}/hide")
+async def hide_comment(
+    comment_id: int,
+    payload: CommentHide,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    """Hide a comment (moderation; hidden, not deleted)"""
+    comment = (
+        db.query(MeetingComment).filter(MeetingComment.id == comment_id).first()
+    )
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    comment.is_hidden = True
+    comment.hidden_reason = payload.reason
+    db.commit()
+    return {"message": "Comment hidden", "id": comment_id}
 
 
 @router.get("/{meeting_id}/pdf")
