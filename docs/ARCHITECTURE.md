@@ -1,0 +1,108 @@
+# CivicSpark AI — Architecture
+
+Design reference: [kaizencode.art/garden/citycamp-ai](https://kaizencode.art/garden/citycamp-ai/)
+— the product sketch this architecture implements incrementally. The core
+principle from that sketch: **structure the corpus, measure failure, then add
+model cleverness — not the reverse.** Chat is one interface over an evidence
+layer; the explorer, search, and watch digests must stay correct even if the
+LLM is offline.
+
+## Runtime shape
+
+```
+Vercel (React SPA, free tier)
+  └─ /api/* rewrite ──► Render Web Service (FastAPI, Docker)
+                          └─ Render Postgres  ◄── the ONLY stateful service
+                               ├─ relational data (users, meetings,
+                               │   campaigns, subscriptions, documents)
+                               ├─ RAG vectors: document_chunks.embedding
+                               │   (pgvector; JSON + numpy cosine fallback)
+                               └─ FTS index (keyword half of hybrid search)
+
+External APIs (all optional; features degrade gracefully):
+  LLM chat        — any OpenAI-compatible endpoint; default Llama 3.3 70B on Groq (free)
+  Embeddings      — any OpenAI-compatible endpoint; default Jina v3 (free tier)
+  Twilio SMS · SMTP email · Geocod.io · Google CSE
+```
+
+No Redis, no Celery, no S3 (local-disk storage by default), no separate
+vector database. Monthly infrastructure cost at small scale: $0.
+
+### Why Postgres for vectors
+
+The proof-of-concept wrote its Chroma/FAISS index to local disk — ephemeral
+on every container platform, so each deploy silently wiped the RAG index.
+Postgres already stores every chunk; keeping the embedding on the chunk row
+makes the index exactly as durable as the data, with one backup story. At
+civic-corpus scale (thousands of chunks, not millions) pgvector with an HNSW
+index is more than sufficient, and the in-process numpy fallback keeps every
+environment (SQLite tests, Postgres without the extension) working.
+
+### LLM provider strategy
+
+All chat and embedding traffic goes through OpenAI-compatible endpoints
+(`app/core/llm.py`), configured by env var:
+
+| Setting | Default |
+|---|---|
+| `LLM_BASE_URL` / `LLM_MODEL` | Groq / `llama-3.3-70b-versatile` |
+| `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` / `EMBEDDING_DIMENSIONS` | Jina / `jina-embeddings-v3` / 1024 |
+| `OPENAI_API_KEY` | legacy fallback provider |
+
+Swapping to OpenRouter, Together, or a local Ollama is configuration, not
+code. Changing the embedding model/dimensions requires re-embedding the
+corpus (the pgvector column is sized from config on fresh databases).
+
+## Evidence layer (Iteration 1)
+
+- **Provenance**: every document records `content_hash` (sha256) and
+  `retrieved_at`; identical re-uploads are deduplicated;
+  `/api/v1/documents/stats` reports `index_as_of`.
+- **Hybrid retrieval**: dense (pgvector or numpy) ∪ keyword (Postgres FTS
+  with GIN index; ILIKE fallback elsewhere), fused with reciprocal-rank
+  fusion. Keyword search alone works with zero LLM keys — search before chat.
+- **Citations**: chat document excerpts carry source title, link, and
+  retrieval date. The system prompt forbids inventing figures, votes, or
+  ordinance text: search and cite, or say the corpus lacks the answer.
+- **Human-gated outreach**: representative emails are drafted and returned
+  for review; the platform never sends on a user's behalf.
+
+## Schema setup
+
+Fresh databases bootstrap via `create_tables()` (SQLAlchemy `create_all`) at
+startup, then `ensure_pgvector()` idempotently enables the extension, adds
+the `embedding` column, backfills from JSON, and creates the HNSW + FTS
+indexes. Alembic migrations 005–007 mirror the same steps for
+migration-managed databases. (The pre-005 chain assumes tables that
+`create_all` historically made, so it is not runnable from scratch — a known
+limitation inherited from the PoC.)
+
+## Roadmap (from the design sketch)
+
+| Iteration | Scope | Status |
+|---|---|---|
+| 1 — Evidence layer | provenance, hybrid index, item deep links | **partially shipped** (this branch: provenance, hybrid index, freshness); agenda-item-level parsing still pending |
+| 2 — Grounded Q&A | intent routing, rerank, claim verification, budget tools, gold eval set | specced in the design sketch |
+| 3 — Watches & outreach | ingest-time watch matching, deep-link-first alerts, consent hardening | PoC subscriptions exist; precision work pending |
+| 4 — Matters graph | track legislative matters across meetings; optional media | not started |
+
+The failure modes in the design sketch are the acceptance tests: if budget
+questions are still answered from chunk soup without citations, it isn't an
+improvement — it's a prettier PoC.
+
+## Local development
+
+```bash
+docker compose up          # pgvector Postgres + API + frontend
+# or natively:
+cd backend && pip install -r requirements-dev.txt && python -m app.main
+cd frontend && npm install && npm run dev
+```
+
+## Deployment
+
+- **Render**: connect the repo as a Blueprint (`render.yaml`) — one web
+  service + one Postgres. Set `LLM_API_KEY` (Groq) and `EMBEDDING_API_KEY`
+  (Jina) in the dashboard.
+- **Vercel**: import the repo (`vercel.json`) — static build of `frontend/`,
+  `/api/*` proxied to the Render service, so no CORS configuration is needed.
