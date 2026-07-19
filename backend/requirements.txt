@@ -1,10 +1,10 @@
 # Runtime dependencies — kept deliberately small so the API fits comfortably
 # on a 512MB Render instance. Dev/test tooling lives in requirements-dev.txt.
 
-# FastAPI and server
-fastapi>=0.104.0,<0.110.0
-uvicorn[standard]==0.24.0
-python-multipart>=0.0.7
+# FastAPI and server (kept current: old starlette versions carry CVEs)
+fastapi>=0.118,<2.0
+uvicorn[standard]>=0.30,<1.0
+python-multipart>=0.0.18
 
 # HTTP clients
 httpx>=0.25.0,<0.28.0
@@ -20,8 +20,9 @@ openai>=1.3.0
 tiktoken>=0.5.0
 numpy<2.0.0,>=1.24.0
 
-# Authentication
-python-jose[cryptography]>=3.3.0
+# Authentication (PyJWT, not python-jose: jose is unmaintained and pulls
+# in the ecdsa package, which has an unfixed timing-attack advisory)
+PyJWT>=2.10.1
 passlib[bcrypt]>=1.7.0
 
 # Notifications (optional at runtime — features degrade without credentials)
