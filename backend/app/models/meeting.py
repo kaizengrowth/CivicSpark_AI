@@ -27,6 +27,7 @@ class Meeting(Base):
     meeting_url = Column(String, nullable=True)  # Link to meeting details
     agenda_url = Column(String, nullable=True)  # Link to agenda PDF
     minutes_url = Column(String, nullable=True)  # Link to meeting minutes
+    video_url = Column(String, nullable=True)  # Meeting video recording
     status = Column(
         String, default="scheduled"
     )  # scheduled, in_progress, completed, cancelled

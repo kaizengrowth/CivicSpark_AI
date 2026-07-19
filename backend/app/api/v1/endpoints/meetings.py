@@ -5,10 +5,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
+import hmac
+
 import httpx
+from app.core.config import Settings, get_settings
 from app.core.database import get_db
 from app.models.document import DocumentChunk
 from app.models.meeting import AgendaItem, Meeting, MeetingCategory
+from app.models.transcript import TranscriptSegment
 from app.schemas.base import PaginationParams, StandardListResponse
 from app.schemas.meeting import (
     AgendaItemResponse,
@@ -19,7 +23,7 @@ from app.schemas.meeting import (
     MeetingResponse,
 )
 from app.services.ai_categorization_service import AICategorization
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -311,6 +315,126 @@ async def get_agenda_item(
             for chunk in chunks
         ],
         "deep_link": f"/meetings?meeting={meeting_id}",
+    }
+
+
+class TranscriptSegmentIn(BaseModel):
+    start: float
+    end: float
+    text: str
+
+
+class TranscriptUpload(BaseModel):
+    video_url: Optional[str] = None
+    source_model: Optional[str] = None
+    segments: List[TranscriptSegmentIn]
+
+
+def _require_ingest_token(
+    settings: Settings, x_ingest_token: Optional[str]
+) -> None:
+    """Shared-secret auth for machine ingest (the transcription workflow)"""
+    expected = settings.transcript_ingest_token
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="Transcript ingest is not configured on this deployment",
+        )
+    if not x_ingest_token or not hmac.compare_digest(x_ingest_token, expected):
+        raise HTTPException(status_code=403, detail="Invalid ingest token")
+
+
+@router.post("/{meeting_id}/transcript")
+async def upload_transcript(
+    meeting_id: int,
+    payload: TranscriptUpload,
+    x_ingest_token: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """Replace a meeting's transcript (machine ingest).
+
+    Called by the free GitHub Actions transcription workflow with the
+    TRANSCRIPT_INGEST_TOKEN shared secret. Segments are replaced
+    atomically so re-transcribing with a better model is idempotent.
+    """
+    _require_ingest_token(settings, x_ingest_token)
+
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if not payload.segments:
+        raise HTTPException(status_code=400, detail="No segments provided")
+
+    db.query(TranscriptSegment).filter(
+        TranscriptSegment.meeting_id == meeting_id
+    ).delete()
+
+    for index, segment in enumerate(payload.segments):
+        db.add(
+            TranscriptSegment(
+                meeting_id=meeting_id,
+                segment_index=index,
+                start_seconds=segment.start,
+                end_seconds=segment.end,
+                text=segment.text.strip(),
+                source_model=payload.source_model,
+            )
+        )
+
+    if payload.video_url:
+        meeting.video_url = payload.video_url
+
+    db.commit()
+    return {
+        "message": "Transcript stored",
+        "meeting_id": meeting_id,
+        "segments": len(payload.segments),
+    }
+
+
+@router.get("/{meeting_id}/transcript")
+async def get_transcript(
+    meeting_id: int,
+    q: Optional[str] = Query(None, description="Filter segments by text"),
+    limit: int = Query(500, ge=1, le=2000),
+    db: Session = Depends(get_db),
+):
+    """A meeting's transcript, each segment linked to its video moment"""
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    query = db.query(TranscriptSegment).filter(
+        TranscriptSegment.meeting_id == meeting_id
+    )
+    if q:
+        query = query.filter(TranscriptSegment.text.ilike(f"%{q}%"))
+
+    segments = query.order_by(TranscriptSegment.segment_index).limit(limit).all()
+
+    def video_link(start: float) -> Optional[str]:
+        if not meeting.video_url:
+            return None
+        # Media-fragment offset works for direct files; Granicus players
+        # also accept an explicit start position.
+        return f"{meeting.video_url}#t={int(start)}"
+
+    return {
+        "meeting_id": meeting_id,
+        "video_url": meeting.video_url,
+        "segment_count": len(segments),
+        "source_model": segments[0].source_model if segments else None,
+        "segments": [
+            {
+                "index": segment.segment_index,
+                "start": segment.start_seconds,
+                "end": segment.end_seconds,
+                "text": segment.text,
+                "video_link": video_link(segment.start_seconds),
+            }
+            for segment in segments
+        ],
     }
 
 
