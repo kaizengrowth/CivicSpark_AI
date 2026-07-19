@@ -6,6 +6,7 @@ from .endpoints import (
     campaigns,
     chatbot,
     documents,
+    matters,
     meeting_images,
     meetings,
     organizations,
@@ -36,6 +37,7 @@ api_router.include_router(
 api_router.include_router(campaigns.router, prefix="/campaigns", tags=["campaigns"])
 api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 api_router.include_router(budget.router, prefix="/budget", tags=["budget"])
+api_router.include_router(matters.router, prefix="/matters", tags=["matters"])
 
 # TODO: Add other routers as they are created
 # api_router.include_router(users.router, prefix="/users", tags=["users"])

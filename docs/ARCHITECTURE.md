@@ -128,6 +128,27 @@ corpus (the pgvector column is sized from config on fresh databases).
   admin queue (`GET /chatbot/feedback?reviewed=false`) is the product
   backlog — each miss becomes a corpus, prompt, or tool fix.
 
+## Matters graph (Iteration 4)
+
+- **Longitudinal tracking** (`app/services/matter_service.py`): official
+  identifiers — zoning applications (Z-7642), PUDs, BOA cases, ordinance
+  and resolution numbers — are extracted from agenda items at ingest and
+  resolved to a persistent `Matter`. Each sighting becomes a
+  `MatterAppearance` with the inferred action (introduced / discussed /
+  amended / postponed / vote_passed / vote_failed), the recorded vote
+  result, and the evidence span it came from.
+- **Status from the record**: a matter's status derives from its latest
+  appearance; terminal outcomes (passed/failed) are never downgraded by
+  backfilling older meetings. The graph asserts only what the record shows.
+- **Surfaces**: `GET /api/v1/matters` (list/search), `/matters/{id}` and
+  `/matters/by-key/{key}` (timeline with per-meeting deep links), and the
+  chatbot's `track_matter` tool — "where is Z-7642 in the process?" is
+  answered from the graph, with a refusal when the matter isn't tracked.
+- **Deliberately out (for now)**: transcript/video sync (Tulsa publishes no
+  A/V feed we ingest) and councilor stance summaries — per the design
+  sketch those ship only with evidence spans and confidence labels, never
+  as unlabeled fact.
+
 ## Schema setup
 
 Fresh databases bootstrap via `create_tables()` (SQLAlchemy `create_all`) at
@@ -145,7 +166,7 @@ limitation inherited from the PoC.)
 | 1 — Evidence layer | provenance, hybrid index, item-level parsing, deep links | **shipped** on this branch (vendor-adapter hardening for TGOV/Granicus feeds remains ongoing) |
 | 2 — Grounded Q&A | intent routing, rerank, claim verification, budget tools, gold eval set | **largely shipped**: intent router, budget tools, agent loop, claim verification, contested-issue policy, eval harness seed. Remaining: cross-encoder rerank, gold set expansion from research-day transcripts |
 | 3 — Watches & outreach | ingest-time watch matching, deep-link-first alerts, consent hardening | **largely shipped**: dual-track matching at ingest, deep-link-first messages, signed one-click unsubscribe, feedback review queue. Remaining: digest dispatch loop, alert-retention metrics |
-| 4 — Matters graph | track legislative matters across meetings; optional media | not started |
+| 4 — Matters graph | track legislative matters across meetings; optional media | **core shipped**: identifier extraction, cross-meeting timelines, status inference, API + track_matter tool. Remaining: media/transcripts (needs a city A/V source), evidence-labeled stance summaries |
 
 The failure modes in the design sketch are the acceptance tests: if budget
 questions are still answered from chunk soup without citations, it isn't an
