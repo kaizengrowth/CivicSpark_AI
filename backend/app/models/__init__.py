@@ -13,6 +13,7 @@ from .document import (
     DocumentCollectionMembership,
 )
 from .feedback import ChatFeedback
+from .matter import Matter, MatterAppearance
 from .meeting import AgendaItem, Meeting, MeetingCategory
 from .notification import Notification, NotificationPreference, NotificationTemplate
 from .notification_preferences import NotificationPreferences
@@ -27,6 +28,8 @@ __all__ = [
     "Meeting",
     "AgendaItem",
     "MeetingCategory",
+    "Matter",
+    "MatterAppearance",
     "Document",
     "DocumentChunk",
     "DocumentCollection",

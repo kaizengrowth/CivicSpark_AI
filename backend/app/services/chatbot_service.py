@@ -471,6 +471,29 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
                 },
             },
             {
+                "name": "track_matter",
+                "description": (
+                    "Track a legislative matter (ordinance, resolution, "
+                    "zoning application like Z-7642, PUD, BOA case) across "
+                    "meetings: its status and full timeline of "
+                    "introductions, discussions, and votes. Use for "
+                    "'where is X in the process?' questions."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "matter_key": {
+                            "type": "string",
+                            "description": (
+                                "The matter identifier as written, e.g. "
+                                "'Z-7642', 'PUD-829', 'Ordinance 25384'"
+                            ),
+                        }
+                    },
+                    "required": ["matter_key"],
+                },
+            },
+            {
                 "name": "search_meetings",
                 "description": (
                     "Find city council meetings by topic keyword and date "
@@ -610,6 +633,9 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
                     arguments.get("meeting_id"), arguments.get("item_number")
                 )
 
+            elif function_name == "track_matter":
+                return self._track_matter(arguments.get("matter_key", ""))
+
             elif function_name == "search_meetings":
                 return self._search_meetings(
                     arguments.get("topic", ""),
@@ -665,6 +691,56 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
         if item.summary:
             result += f"Summary: {item.summary[:400]}\n"
         result += f"Deep link: /meetings?meeting={meeting_id}\n"
+        return result
+
+    def _track_matter(self, matter_key: str) -> str:
+        """Answer 'where is matter X?' from the matters graph"""
+        from app.models.matter import Matter, MatterAppearance
+        from app.services.matter_service import extract_matter_keys
+
+        if not matter_key.strip():
+            return "matter_key is required."
+
+        # Normalize whatever form the user gave ("Ordinance No. 25384",
+        # "z 7642") through the same extractor used at ingest.
+        extracted = extract_matter_keys(matter_key)
+        normalized = extracted[0][0] if extracted else matter_key.strip().lower()
+
+        matter = (
+            self.db.query(Matter).filter(Matter.matter_key == normalized).first()
+        )
+        if matter is None:
+            return (
+                f"No matter matching '{matter_key}' in the tracked record. "
+                "Do not guess its status; suggest checking "
+                "tulsacouncil.org or the meeting explorer."
+            )
+
+        rows = (
+            self.db.query(MatterAppearance, Meeting)
+            .join(Meeting, Meeting.id == MatterAppearance.meeting_id)
+            .filter(MatterAppearance.matter_id == matter.id)
+            .order_by(MatterAppearance.appeared_on)
+            .all()
+        )
+
+        result = (
+            f"Matter {matter.matter_key.upper()}"
+            f"{f' — {matter.title}' if matter.title else ''}\n"
+            f"Current status: {matter.status}\n"
+            f"Timeline ({len(rows)} appearance(s)):\n"
+        )
+        for appearance, meeting in rows:
+            date_str = (
+                appearance.appeared_on.strftime("%B %d, %Y")
+                if appearance.appeared_on
+                else "unknown date"
+            )
+            result += (
+                f"- {date_str}: {appearance.action}"
+                f"{f' ({appearance.vote_result})' if appearance.vote_result else ''}"
+                f" at {meeting.title} (deep link: /meetings?meeting={meeting.id})\n"
+            )
         return result
 
     def _search_meetings(self, topic: str, date_from, date_to) -> str:

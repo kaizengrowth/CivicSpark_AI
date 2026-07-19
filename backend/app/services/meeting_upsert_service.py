@@ -89,6 +89,14 @@ class MeetingUpsertService:
                 if pdf_storage_path:
                     meeting.minutes_url = pdf_storage_path
 
+                # Clear matter appearances first (they reference agenda
+                # items and are re-derived when matters are re-linked below)
+                from app.models.matter import MatterAppearance
+
+                db.query(MatterAppearance).filter(
+                    MatterAppearance.meeting_id == meeting.id
+                ).delete()
+
                 # Clear existing agenda items (will be recreated)
                 db.query(AgendaItem).filter(
                     AgendaItem.meeting_id == meeting.id
@@ -112,6 +120,16 @@ class MeetingUpsertService:
                     WatchService(settings).queue_matches(db, meeting)
                 except Exception as e:
                     logger.warning(f"Watch matching failed for {external_id}: {e}")
+
+            # Matters graph: link this meeting's agenda items to their
+            # legislative matters (runs on updates too — agenda items are
+            # recreated above). Never allowed to break ingestion.
+            try:
+                from app.services.matter_service import MatterService
+
+                MatterService().link_meeting_matters(db, meeting)
+            except Exception as e:
+                logger.warning(f"Matter linking failed for {external_id}: {e}")
 
             return meeting, is_new
 
