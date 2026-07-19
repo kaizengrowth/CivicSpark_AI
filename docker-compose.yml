@@ -1,10 +1,13 @@
 version: '3.8'
 
+# Local development stack: one database, one API, one frontend.
+# Postgres (with pgvector) is the only stateful service — it also holds
+# the RAG vector index, so there is no Redis/Celery/vector-DB sidecar.
+
 services:
-  # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
-    container_name: citycamp_postgres
+    image: pgvector/pgvector:pg16
+    container_name: civicspark_postgres
     environment:
       POSTGRES_DB: citycamp_db
       POSTGRES_USER: user
@@ -14,51 +17,42 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - citycamp_network
+      - civicspark_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d citycamp_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  # Redis for Celery
-  redis:
-    image: redis:7-alpine
-    container_name: citycamp_redis
-    ports:
-      - "6382:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - citycamp_network
-
-  # Backend API
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: citycamp_backend
+    container_name: civicspark_backend
     environment:
       - DATABASE_URL=postgresql://user:password@postgres:5432/citycamp_db
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=your-secret-key-for-development
+      - SECRET_KEY=dev-secret-key-not-for-production
       - ENVIRONMENT=development
       - DEBUG=True
+      - STORAGE_DIR=/app/storage
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     ports:
       - "8002:8000"
     volumes:
       - ./backend:/app
-      - ./data:/app/data
-      - /app/venv
+      - backend_storage:/app/storage
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
     networks:
-      - citycamp_network
+      - civicspark_network
     restart: unless-stopped
 
-  # Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: citycamp_frontend
+    container_name: civicspark_frontend
     ports:
       - "3002:3000"
     volumes:
@@ -67,84 +61,13 @@ services:
     depends_on:
       - backend
     networks:
-      - citycamp_network
-    restart: unless-stopped
-
-  # Celery Worker
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: citycamp_celery_worker
-    command: celery -A app.celery worker --loglevel=info
-    environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/citycamp_db
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=your-secret-key-for-development
-      - ENVIRONMENT=development
-      - DEBUG=True
-    volumes:
-      - ./backend:/app
-      - /app/venv
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - citycamp_network
-    restart: unless-stopped
-
-  # Celery Beat (Scheduler)
-  celery_beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: citycamp_celery_beat
-    command: celery -A app.celery beat --loglevel=info
-    environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/citycamp_db
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=your-secret-key-for-development
-      - ENVIRONMENT=development
-      - DEBUG=True
-    volumes:
-      - ./backend:/app
-      - /app/venv
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - citycamp_network
-    restart: unless-stopped
-
-  # Celery Flower (Monitoring)
-  celery_flower:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: citycamp_celery_flower
-    command: celery -A app.celery flower --port=5555
-    environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/citycamp_db
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=your-secret-key-for-development
-      - ENVIRONMENT=development
-      - DEBUG=True
-    ports:
-      - "5557:5555"
-    volumes:
-      - ./backend:/app
-      - /app/venv
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - citycamp_network
+      - civicspark_network
     restart: unless-stopped
 
 volumes:
   postgres_data:
-  redis_data:
+  backend_storage:
 
 networks:
-  citycamp_network:
+  civicspark_network:
     driver: bridge
