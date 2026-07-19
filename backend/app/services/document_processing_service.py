@@ -1,10 +1,12 @@
 import asyncio
+import hashlib
 import logging
 import os
 import re
 import shutil
 import tempfile
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -30,12 +32,10 @@ except ImportError:
     TIKTOKEN_AVAILABLE = False
     print("Warning: tiktoken not available, token counting will be limited")
 from app.core.config import Settings
+from app.core.llm import get_chat_client
 from app.models.document import Document, DocumentChunk
 from app.services.vector_service import VectorService
 from docx import Document as DocxDocument
-
-# AI and NLP imports
-from openai import OpenAI
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -46,11 +46,7 @@ class DocumentProcessor:
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.openai_client = (
-            OpenAI(api_key=settings.openai_api_key)
-            if settings.is_openai_configured
-            else None
-        )
+        self.openai_client, self.chat_model = get_chat_client(settings)
         self.encoding = (
             tiktoken.get_encoding("cl100k_base") if TIKTOKEN_AVAILABLE else None
         )  # GPT-4 encoding
@@ -341,7 +337,7 @@ class DocumentProcessor:
                 text = text[:max_chars] + "..."
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model=self.chat_model,
                 messages=[
                     {
                         "role": "system",
@@ -374,7 +370,7 @@ class DocumentProcessor:
                 text = text[:max_chars] + "..."
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model=self.chat_model,
                 messages=[
                     {
                         "role": "system",
@@ -393,6 +389,15 @@ class DocumentProcessor:
             return ""
 
 
+def _sha256_file(file_path: str) -> str:
+    """Content hash of a source file, for provenance and dedup"""
+    digest = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 class DocumentProcessingService:
     """Main service for processing documents and adding them to RAG system"""
 
@@ -407,6 +412,22 @@ class DocumentProcessingService:
     ) -> Optional[Document]:
         """Process a document file and add it to the database and vector store"""
         try:
+            # Provenance first: hash the source so re-uploads of unchanged
+            # files are deduplicated and every document records what was
+            # ingested and when.
+            content_hash = _sha256_file(file_path)
+            existing = (
+                self.db.query(Document)
+                .filter(Document.content_hash == content_hash)
+                .first()
+            )
+            if existing is not None:
+                logger.info(
+                    f"Skipping ingest: identical content already indexed as "
+                    f"document {existing.id}"
+                )
+                return existing
+
             # Detect file type
             mime_type = self.processor.detect_file_type(file_path)
 
@@ -438,6 +459,8 @@ class DocumentProcessingService:
                 document_type=document_data.get("document_type", "unknown"),
                 category=document_data.get("category", ""),
                 source_url=document_data.get("source_url", ""),
+                content_hash=content_hash,
+                retrieved_at=datetime.now(timezone.utc),
                 file_path=stored_path,
                 file_name=Path(file_path).name,
                 file_size=os.path.getsize(file_path),
@@ -471,7 +494,6 @@ class DocumentProcessingService:
                     word_count=chunk_data["word_count"],
                     start_char=chunk_data["start_char"],
                     end_char=chunk_data["end_char"],
-                    embedding_model="text-embedding-3-small",
                 )
 
                 self.db.add(chunk)

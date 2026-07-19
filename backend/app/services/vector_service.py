@@ -14,35 +14,20 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 from app.core.config import Settings
+from app.core.llm import get_embedding_client
 from app.models.document import Document, DocumentChunk
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-try:
-    from openai import OpenAI
-
-    OPENAI_AVAILABLE = True
-except ImportError:  # pragma: no cover - openai is a hard dep in production
-    OpenAI = None
-    OPENAI_AVAILABLE = False
-
 logger = logging.getLogger(__name__)
-
-EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_DIMENSIONS = 1536
 
 
 class EmbeddingService:
-    """Generates embeddings using OpenAI"""
+    """Generates embeddings via the configured OpenAI-compatible provider"""
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.client = (
-            OpenAI(api_key=settings.openai_api_key)
-            if OPENAI_AVAILABLE and settings.is_openai_configured
-            else None
-        )
-        self.model = EMBEDDING_MODEL
+        self.client, self.model, self.dimensions = get_embedding_client(settings)
 
     async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for a list of texts"""

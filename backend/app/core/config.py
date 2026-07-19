@@ -31,7 +31,23 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
+    # LLM provider — any OpenAI-compatible endpoint. Defaults target Llama
+    # on Groq's free tier; point LLM_BASE_URL at OpenRouter, Together, a
+    # local Ollama (http://localhost:11434/v1), etc. to swap providers.
+    llm_api_key: Optional[str] = None
+    llm_base_url: str = "https://api.groq.com/openai/v1"
+    llm_model: str = "llama-3.3-70b-versatile"
+
+    # Embeddings — likewise OpenAI-compatible. Groq doesn't serve
+    # embeddings, so this is configured separately (Jina's free tier by
+    # default; Ollama and others also work).
+    embedding_api_key: Optional[str] = None
+    embedding_base_url: str = "https://api.jina.ai/v1"
+    embedding_model: str = "jina-embeddings-v3"
+    embedding_dimensions: int = 1024
+
     # External APIs (all optional — features degrade gracefully without them)
+    # OPENAI_API_KEY remains supported as a legacy fallback provider.
     openai_api_key: Optional[str] = None
     geocodio_api_key: Optional[str] = None
     twilio_account_sid: Optional[str] = None
@@ -105,12 +121,56 @@ class Settings(BaseSettings):
 
     @property
     def is_openai_configured(self) -> bool:
-        """Check if OpenAI API key is properly configured"""
+        """Check if a legacy OpenAI API key is properly configured"""
         return (
             self.openai_api_key is not None
             and self.openai_api_key.strip() != ""
             and not self.openai_api_key.startswith("sk-placeholder")
         )
+
+    @property
+    def chat_llm(self) -> Optional[dict]:
+        """Resolved chat-model config: {api_key, base_url, model}.
+
+        Prefers the provider-agnostic LLM_* settings (open-source models);
+        falls back to a legacy OPENAI_API_KEY if that's all that is set.
+        """
+        if self.llm_api_key and self.llm_api_key.strip():
+            return {
+                "api_key": self.llm_api_key,
+                "base_url": self.llm_base_url,
+                "model": self.llm_model,
+            }
+        if self.is_openai_configured:
+            return {
+                "api_key": self.openai_api_key,
+                "base_url": "https://api.openai.com/v1",
+                "model": "gpt-4.1",
+            }
+        return None
+
+    @property
+    def embedding_llm(self) -> Optional[dict]:
+        """Resolved embedding config: {api_key, base_url, model, dimensions}"""
+        if self.embedding_api_key and self.embedding_api_key.strip():
+            return {
+                "api_key": self.embedding_api_key,
+                "base_url": self.embedding_base_url,
+                "model": self.embedding_model,
+                "dimensions": self.embedding_dimensions,
+            }
+        if self.is_openai_configured:
+            return {
+                "api_key": self.openai_api_key,
+                "base_url": "https://api.openai.com/v1",
+                "model": "text-embedding-3-small",
+                "dimensions": 1536,
+            }
+        return None
+
+    @property
+    def is_llm_configured(self) -> bool:
+        return self.chat_llm is not None
 
     def validate_production_settings(self) -> None:
         """Fail fast on unsafe production configuration"""

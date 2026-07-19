@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.models.meeting import MeetingCategory
 
 # AI/ML imports
-from openai import OpenAI
+from app.core.llm import get_chat_client
 from pydantic import BaseModel, Field
 
 # Database imports
@@ -527,14 +527,9 @@ class AICategorization:
 
     def __init__(self):
         """Initialize the AI categorization service"""
-        api_key = settings.openai_api_key
-        if not api_key:
-            logger.warning(
-                "OpenAI API key not configured. AI features will be limited."
-            )
-            self.openai_client = None
-        else:
-            self.openai_client = OpenAI(api_key=api_key)
+        self.openai_client, self.model = get_chat_client(settings)
+        if self.openai_client is None:
+            logger.warning("No LLM configured. AI features will be limited.")
 
     @classmethod
     def get_category_definitions(cls) -> Dict[str, CategoryDefinition]:
@@ -671,7 +666,7 @@ class AICategorization:
             """
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-4",  # Upgrade to GPT-4 for better accuracy
+                model=self.model,
                 messages=[
                     {
                         "role": "system",
@@ -1205,9 +1200,11 @@ class AICategorization:
                 },
             ]
 
-            # Call OpenAI Vision API
+            # Call the vision-capable chat API. Requires a multimodal model
+            # (e.g. meta-llama/llama-4-scout-17b-16e-instruct on Groq, or a
+            # GPT-4-class model on the legacy OpenAI fallback).
             response = self.openai_client.chat.completions.create(
-                model="gpt-4-vision-preview",
+                model=self.model,
                 messages=messages,
                 max_tokens=2000,
                 temperature=0.1,

@@ -1,9 +1,8 @@
 import logging
-import os
 from typing import List, Optional
 
-import openai
-from app.core.config import Settings
+from app.core.config import Settings, settings
+from app.core.llm import get_chat_client
 from app.services.geocoding_service import GeocodingService
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -185,10 +184,8 @@ async def compose_email(request: EmailComposeRequest) -> EmailComposition:
     Generate an AI-powered email to city representatives based on the user's concern.
     """
     try:
-        # Use OpenAI for AI-powered email generation if available
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-
-        if openai_api_key:
+        # Use the configured LLM for email generation if available
+        if settings.is_llm_configured:
             subject, body = await generate_ai_email(
                 request.issue,
                 request.tone,
@@ -220,10 +217,14 @@ async def generate_ai_email(
     issue: str, tone: str, representative: Optional[Representative]
 ) -> tuple[str, str]:
     """
-    Use OpenAI to generate a professional email to city representatives.
+    Use the configured LLM to draft a professional email to city
+    representatives. The draft is returned to the user for review — the
+    platform never sends mail on the user's behalf.
     """
     try:
-        openai.api_key = os.getenv("OPENAI_API_KEY")
+        client, model = get_chat_client(settings)
+        if client is None:
+            return generate_template_email(issue, tone, representative)
 
         rep_info = (
             f"{representative.name} ({representative.position})"
@@ -256,8 +257,8 @@ async def generate_ai_email(
         BODY: [email body]
         """
 
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        response = client.chat.completions.create(
+            model=model,
             messages=[
                 {
                     "role": "system",
@@ -285,7 +286,7 @@ async def generate_ai_email(
         return subject, body
 
     except Exception as e:
-        logger.error(f"Error with OpenAI API: {str(e)}")
+        logger.error(f"Error with LLM API: {str(e)}")
         # Fallback to template-based generation
         return generate_template_email(issue, tone, representative)
 

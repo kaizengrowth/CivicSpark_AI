@@ -111,9 +111,9 @@ async def health_check():
         version=settings.project_version,
         environment=settings.environment,
         features={
-            "chatbot": settings.is_openai_configured,
+            "chatbot": settings.is_llm_configured,
             "database": True,  # If we reach here, database is likely working
-            "openai_configured": settings.is_openai_configured,
+            "llm_configured": settings.is_llm_configured,
         },
     )
 

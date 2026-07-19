@@ -4,31 +4,30 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.core.config import Settings
+from app.core.llm import get_chat_client
 from app.models.campaign import Campaign
 from app.models.meeting import Meeting
 from app.services.research_service import ResearchService
 from app.services.vector_service import VectorService
-from openai import OpenAI
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 
 class ChatbotService:
-    """Enhanced chatbot service with GPT-4 and research capabilities"""
+    """Chatbot service backed by the configured LLM (Llama by default)
+    with document-search and research capabilities"""
 
     def __init__(self, db: Session, settings: Settings):
         self.db = db
         self.settings = settings
 
-        # Validate OpenAI API key
-        if not settings.is_openai_configured:
+        self.client, self.model = get_chat_client(settings)
+        if self.client is None:
             logger.warning(
-                "OpenAI API key is missing or using placeholder value. Chatbot will use fallback responses only."
+                "No LLM configured (set LLM_API_KEY or OPENAI_API_KEY). "
+                "Chatbot will use fallback responses only."
             )
-            self.client = None
-        else:
-            self.client = OpenAI(api_key=settings.openai_api_key)
 
         self.research_service = ResearchService(settings)
         self.vector_service = VectorService(settings, db)
@@ -360,8 +359,15 @@ If asked about non-Tulsa topics, politely redirect: "I focus on **Tulsa, Oklahom
 
 Be natural, conversational, and as helpful as possible in encouraging civic participation."""
 
+    def get_tool_definitions(self) -> List[Dict[str, Any]]:
+        """Tool definitions in the OpenAI-compatible tools format"""
+        return [
+            {"type": "function", "function": fn}
+            for fn in self.get_function_definitions()
+        ]
+
     def get_function_definitions(self) -> List[Dict[str, Any]]:
-        """Define available functions for OpenAI function calling"""
+        """Define available functions for tool calling"""
         return [
             {
                 "name": "search_documents",
@@ -555,21 +561,23 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
             # Add current user message
             messages.append({"role": "user", "content": user_message})
 
-            logger.info(f"Calling OpenAI GPT-4 API with {len(messages)} messages...")
+            logger.info(
+                f"Calling {self.model} with {len(messages)} messages..."
+            )
 
-            # Enable function-calling RAG only when configured
+            # Enable tool-calling RAG only when configured
             if self.settings.enable_rag:
                 response = self.client.chat.completions.create(
-                    model="gpt-4.1",
+                    model=self.model,
                     messages=messages,
                     max_tokens=800,
                     temperature=0.7,
-                    functions=self.get_function_definitions(),
-                    function_call="auto",
+                    tools=self.get_tool_definitions(),
+                    tool_choice="auto",
                 )
             else:
                 response = self.client.chat.completions.create(
-                    model="gpt-4.1",
+                    model=self.model,
                     messages=messages,
                     max_tokens=800,
                     temperature=0.7,
@@ -577,16 +585,18 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
 
             message = response.choices[0].message
 
-            # If the model requested a function, execute it (RAG path)
-            if self.settings.enable_rag and getattr(message, "function_call", None):
+            # If the model requested a tool, execute it (RAG path)
+            tool_calls = getattr(message, "tool_calls", None)
+            if self.settings.enable_rag and tool_calls:
                 try:
-                    fn_name = message.function_call.name
-                    args_json = message.function_call.arguments or "{}"
+                    tool_call = tool_calls[0]
+                    fn_name = tool_call.function.name
+                    args_json = tool_call.function.arguments or "{}"
                     args = json.loads(args_json)
                     tool_result = await self.process_function_call(fn_name, args)
                     return tool_result
                 except Exception as e:
-                    logger.error(f"Function call handling failed: {e}")
+                    logger.error(f"Tool call handling failed: {e}")
 
             # Fall back to normal assistant content
             ai_response = message.content.strip()

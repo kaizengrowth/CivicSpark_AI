@@ -6,8 +6,6 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_DIMENSIONS = 1536
-
 # Database connection
 DATABASE_URL = settings.database_url
 
@@ -55,13 +53,18 @@ def ensure_pgvector() -> bool:
     if engine.dialect.name != "postgresql":
         return False
 
+    # Dimension follows the configured embedding provider. Switching
+    # providers with a different dimension requires dropping the embedding
+    # column and re-embedding the corpus.
+    dimensions = (settings.embedding_llm or {}).get("dimensions", 1536)
+
     try:
         with engine.begin() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             conn.execute(
                 text(
                     "ALTER TABLE document_chunks "
-                    f"ADD COLUMN IF NOT EXISTS embedding vector({EMBEDDING_DIMENSIONS})"
+                    f"ADD COLUMN IF NOT EXISTS embedding vector({dimensions})"
                 )
             )
             conn.execute(
