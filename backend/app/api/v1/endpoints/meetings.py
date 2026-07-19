@@ -7,6 +7,7 @@ from typing import List, Optional
 
 import httpx
 from app.core.database import get_db
+from app.models.document import DocumentChunk
 from app.models.meeting import AgendaItem, Meeting, MeetingCategory
 from app.schemas.base import PaginationParams, StandardListResponse
 from app.schemas.meeting import (
@@ -249,6 +250,68 @@ async def get_meeting_detail(meeting_id: int, db: Session = Depends(get_db)):
         categories=categories,
         pdf_url=f"/api/v1/meetings/{meeting_id}/pdf" if meeting.minutes_url else None,
     )
+
+
+@router.get("/{meeting_id}/items", response_model=List[AgendaItemResponse])
+async def list_agenda_items(meeting_id: int, db: Session = Depends(get_db)):
+    """Canonical agenda-item list for a meeting (deep-linkable)"""
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    return (
+        db.query(AgendaItem)
+        .filter(AgendaItem.meeting_id == meeting_id)
+        .order_by(AgendaItem.id)
+        .all()
+    )
+
+
+@router.get("/{meeting_id}/items/{item_id}")
+async def get_agenda_item(
+    meeting_id: int, item_id: int, db: Session = Depends(get_db)
+):
+    """Canonical record for one agenda item: the deep-link target.
+
+    Returns the structured item plus any indexed document excerpts linked
+    to it, so a journalist can cite the item without touching the chatbot.
+    """
+    item = (
+        db.query(AgendaItem)
+        .filter(AgendaItem.id == item_id, AgendaItem.meeting_id == meeting_id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Agenda item not found")
+
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+
+    chunks = (
+        db.query(DocumentChunk)
+        .filter(DocumentChunk.agenda_item_id == item_id)
+        .order_by(DocumentChunk.chunk_index)
+        .limit(10)
+        .all()
+    )
+
+    return {
+        "item": AgendaItemResponse.model_validate(item),
+        "meeting": {
+            "id": meeting.id,
+            "title": meeting.title,
+            "meeting_date": meeting.meeting_date,
+        },
+        "excerpts": [
+            {
+                "document_id": chunk.document_id,
+                "chunk_index": chunk.chunk_index,
+                "section_title": chunk.section_title,
+                "content": chunk.content,
+            }
+            for chunk in chunks
+        ],
+        "deep_link": f"/meetings?meeting={meeting_id}",
+    }
 
 
 @router.get("/{meeting_id}/pdf")

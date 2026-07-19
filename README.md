@@ -1,10 +1,13 @@
 # CivicSpark AI
 
-Civic engagement platform for Tulsa residents. AI-powered tools for city government interaction, meeting notifications, and community organizing.
+Civic engagement platform for Tulsa residents: a searchable evidence layer
+over city government documents, with AI assistance on top — meeting explorer,
+grounded Q&A, topic notifications, representative lookup, and organizing
+tools.
 
-**Archived.** This repository is the initial proof-of-concept. The project continues in active development with a new architecture. The demo was built in consultation with the Tulsa City Auditor's Office and local community organizations.
-
-**Live demo:** [https://d1s9nkkr0t3pmn.cloudfront.net](https://d1s9nkkr0t3pmn.cloudfront.net)
+Built in consultation with the Tulsa City Auditor's Office and local
+community organizations. Design notes and iteration plan:
+[kaizencode.art/garden/citycamp-ai](https://kaizencode.art/garden/citycamp-ai/)
 
 ![](homepage.png)
 
@@ -12,66 +15,52 @@ Civic engagement platform for Tulsa residents. AI-powered tools for city governm
 
 ## Features
 
-- **AI Chatbot** — RAG-enhanced responses using city budgets, legislation, and policies
-- **Meeting Notifications** — Topic-based subscriptions (housing, transportation, etc.) via SMS and email
-- **Meeting Analytics** — AI categorization of 42+ civic topics, searchable minutes
-- **Representative Lookup** — District-based lookup with AI-powered email generation
-- **Campaigns** — Campaign tracking and neighborhood organizing tools
-
----
-
-## RAG System
-
-The chatbot uses Retrieval-Augmented Generation (RAG) to search and cite actual city documents instead of generic responses.
-
-**Pipeline:** Document upload → Text extraction → Chunking (512 tokens, 50 overlap) → Embeddings (OpenAI text-embedding-3-small) → Vector store (ChromaDB / FAISS) → Semantic search → Context injection at query time
-
-**Components:** ChromaDB (dev) / FAISS (prod), PostgreSQL for metadata, FastAPI for upload/search
-
-**Document types:** Budgets, legislation, meeting minutes, reports, policies
-
-**Setup:** `pip install -r backend/requirements.txt` then `cd backend && python -m alembic upgrade head`. See [docs/RAG_SYSTEM_README.md](docs/RAG_SYSTEM_README.md).
+- **Meeting Explorer** — searchable agendas and minutes, AI categorization
+  across 42+ civic topics
+- **Grounded Q&A** — chatbot answers cite actual city documents (budgets,
+  legislation, policies) with source links and retrieval dates; it refuses
+  rather than invents figures
+- **Topic Watch** — subscriptions (housing, transportation, …) via SMS and
+  email
+- **Representative Lookup** — district lookup by address, with AI-drafted
+  constituent email that the user reviews and sends themself — never
+  auto-sent
+- **Campaigns** — campaign tracking and neighborhood organizing tools
 
 ---
 
 ## Architecture
 
+One database, one API, one static frontend. Runs free at small scale.
+
+```
+Vercel (React SPA) ─ /api/* ─► Render (FastAPI) ─► Postgres (pgvector)
+                                                     ├─ relational data
+                                                     ├─ RAG vector index
+                                                     └─ full-text search
+```
+
 | Layer | Technology |
 |-------|------------|
-| Frontend | React 18, TypeScript, Vite, Tailwind |
-| Backend | FastAPI, Python 3.11 |
-| Database | PostgreSQL, Redis |
-| AI | OpenAI GPT-4, RAG (ChromaDB/FAISS) |
-| Infrastructure | AWS (ECS, RDS, S3, CloudFront) |
+| Frontend | React 18, TypeScript, Vite, Tailwind (Vercel) |
+| Backend | FastAPI, Python 3.11 (Render, Docker) |
+| Database | PostgreSQL + pgvector — the only stateful service |
+| LLM | Open-source models via any OpenAI-compatible API — Llama 3.3 70B on Groq by default |
+| Embeddings | Jina v3 by default (configurable; numpy fallback needs no extension) |
 
-```
-CloudFront → React SPA (S3) + FastAPI (ECS)
-                    │
-                    ├── PostgreSQL (RDS)
-                    ├── Redis (ElastiCache)
-                    ├── OpenAI API
-                    └── RAG Vector Store (ChromaDB/FAISS)
-```
+Key properties:
 
----
+- **The index survives deploys** — vectors live on document chunks in
+  Postgres, not on ephemeral disk
+- **Search before chat** — hybrid retrieval (FTS ∪ dense vectors, rank
+  fusion) works even with no LLM configured
+- **Provenance everywhere** — every document records source hash and
+  retrieval time; the API reports how fresh the index is
+- **Provider-agnostic AI** — swap Groq for OpenRouter, Together, or local
+  Ollama by env var; no OpenAI dependency
 
-## Project Structure
-
-```
-backend/          # FastAPI app
-  app/api/v1/     # REST endpoints
-  app/models/     # SQLAlchemy models
-  app/services/   # Chatbot, vector, document processing
-  app/scrapers/   # Tulsa city council data
-
-frontend/         # React + TypeScript
-  src/pages/      # Route components
-  src/components/ # Shared UI
-
-aws/              # Terraform, deployment scripts
-docs/             # Documentation
-tests/            # Backend (pytest), frontend (Jest)
-```
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design and
+roadmap.
 
 ---
 
@@ -81,13 +70,15 @@ tests/            # Backend (pytest), frontend (Jest)
 git clone https://github.com/kaizengrowth/CivicSpark_AI.git
 cd CivicSpark_AI
 
-# Backend
+# Everything at once (pgvector Postgres + API + frontend):
+docker compose up
+
+# Or natively:
 cd backend && python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-cp env.example .env
+pip install -r requirements-dev.txt
+cp env.example .env   # add your LLM_API_KEY (Groq) + EMBEDDING_API_KEY (Jina)
 python -m app.main
 
-# Frontend (new terminal)
 cd frontend && npm install && npm run dev
 ```
 
@@ -95,7 +86,17 @@ cd frontend && npm install && npm run dev
 - API: http://localhost:8000
 - API docs: http://localhost:8000/docs
 
-**Required env vars:** `DATABASE_URL`, `REDIS_URL`, `OPENAI_API_KEY`, `SECRET_KEY`
+**Required env vars:** `DATABASE_URL`, `SECRET_KEY`, `LLM_API_KEY`
+(everything else is optional — features degrade gracefully).
+
+---
+
+## Deployment
+
+| Target | How |
+|--------|-----|
+| Render (API + Postgres) | Connect the repo as a Blueprint — [render.yaml](render.yaml) |
+| Vercel (frontend) | Import the repo — [vercel.json](vercel.json) proxies `/api/*` to Render |
 
 ---
 
@@ -103,8 +104,8 @@ cd frontend && npm install && npm run dev
 
 | Document | Description |
 |----------|-------------|
-| [RAG System](docs/RAG_SYSTEM_README.md) | Document processing and vector search |
-| [AWS Deployment](docs/aws-deployment-guide.md) | Production infrastructure |
+| [Architecture](docs/ARCHITECTURE.md) | System design, evidence layer, roadmap |
+| [Design sketch](https://kaizencode.art/garden/citycamp-ai/) | Product direction, peer systems, failure modes |
 
 ---
 

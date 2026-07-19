@@ -53,6 +53,21 @@ def ensure_pgvector() -> bool:
     if engine.dialect.name != "postgresql":
         return False
 
+    # Full-text search index for the keyword half of hybrid retrieval.
+    # Independent of pgvector: keyword search must work even when no
+    # embedding provider is configured.
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_document_chunks_fts "
+                    "ON document_chunks "
+                    "USING gin (to_tsvector('english', content))"
+                )
+            )
+    except Exception as e:
+        logger.warning(f"Could not create FTS index (search still works): {e}")
+
     # Dimension follows the configured embedding provider. Switching
     # providers with a different dimension requires dropping the embedding
     # column and re-embedding the corpus.

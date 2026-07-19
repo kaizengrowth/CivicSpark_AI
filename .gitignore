@@ -227,12 +227,10 @@ deployment_trigger.txt
 *_deploy.sh
 deploy-*.sh
 
-# Documentation files (keep only main README.md)
+# Documentation files
 DEVELOPMENT.md
 QUICKSTART.md
-ARCHITECTURE.md
-docs/
-!docs/README.md
+docs/screenshots/
 
 # Test documents and PDFs
 tests/downloaded_documents/

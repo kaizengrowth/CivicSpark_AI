@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { apiRequest, API_ENDPOINTS } from '../config/api';
 import { Meeting as BaseMeeting, AgendaItem, SAMPLE_MEETINGS } from '../data/sampleMeetings';
@@ -32,6 +33,9 @@ interface Meeting extends BaseMeeting {
 }
 
 export const MeetingsPage: React.FC = () => {
+  // The selected meeting lives in the URL (?meeting=<id>) so agendas and
+  // minutes are deep-linkable from chat citations, alerts, and shared links.
+  const [searchParams, setSearchParams] = useSearchParams();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -458,9 +462,29 @@ export const MeetingsPage: React.FC = () => {
     // Only fetch if not already selected
     if (selectedMeeting?.id !== meetingId) {
       console.log('Meeting clicked:', meetingId);
+      setSearchParams(prev => {
+        const params = new URLSearchParams(prev);
+        params.set('meeting', String(meetingId));
+        return params;
+      });
       fetchMeetingDetails(meetingId);
     }
-  }, [selectedMeeting?.id, fetchMeetingDetails]);
+  }, [selectedMeeting?.id, fetchMeetingDetails, setSearchParams]);
+
+  // Deep-link support: opening /meetings?meeting=<id> (from a chat
+  // citation, alert email, or shared link) selects that meeting directly.
+  useEffect(() => {
+    const meetingParam = searchParams.get('meeting');
+    if (meetingParam) {
+      const meetingId = Number(meetingParam);
+      if (!Number.isNaN(meetingId) && selectedMeeting?.id !== meetingId) {
+        fetchMeetingDetails(meetingId);
+      }
+    } else if (selectedMeeting) {
+      setSelectedMeeting(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, fetchMeetingDetails]);
 
   if (loading) {
     return (
