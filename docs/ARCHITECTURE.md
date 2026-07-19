@@ -149,8 +149,24 @@ corpus (the pgvector column is sized from config on fresh databases).
   CPU; a ~3h meeting fits well inside the 6h job limit at $0). Timestamped
   segments land in `transcript_segments` via a shared-secret machine-ingest
   endpoint (`POST /meetings/{id}/transcript`, `TRANSCRIPT_INGEST_TOKEN`),
-  and `GET /meetings/{id}/transcript?q=` returns every quote with a
+  and `GET /meetings/{id}/transcript?q=&lang=` returns every quote with a
   `video_link` pointing at its exact moment in the recording.
+- **Daily media sync** (`.github/workflows/daily-media-sync.yml`): every
+  morning, `discover_granicus_videos.py` reads the Tulsa Granicus (TGOV)
+  RSS feeds, pairs new videos with `/meetings/media/pending` by meeting
+  date, and fans out transcription jobs. `enrich_transcript.py` then
+  translates segments to Spanish and produces an LLM analysis
+  (summary + topics constrained to the platform's category taxonomy),
+  stored via `POST /meetings/{id}/analysis` — topics/keywords merge into
+  the same sets that drive browse filters and watch subscriptions;
+  summaries only fill empty fields. All on free runners with the free
+  Groq tier.
+- **Media UI** (`MeetingMediaPanel`): in the meeting explorer — video
+  player synced two-way with the transcript (click a line to seek,
+  playback highlights and follows the spoken line), English/Español
+  toggle, in-transcript search, and moderated resident comments
+  (authenticated posting, optional anchor to the current video moment,
+  admin hide-with-reason).
 - **Deliberately out (for now)**: councilor stance summaries — per the
   design sketch those ship only with evidence spans and confidence labels,
   never as unlabeled fact.
