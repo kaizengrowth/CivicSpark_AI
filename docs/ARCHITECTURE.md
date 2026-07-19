@@ -144,10 +144,16 @@ corpus (the pgvector column is sized from config on fresh databases).
   `/matters/by-key/{key}` (timeline with per-meeting deep links), and the
   chatbot's `track_matter` tool — "where is Z-7642 in the process?" is
   answered from the graph, with a refusal when the matter isn't tracked.
-- **Deliberately out (for now)**: transcript/video sync (Tulsa publishes no
-  A/V feed we ingest) and councilor stance summaries — per the design
-  sketch those ship only with evidence spans and confidence labels, never
-  as unlabeled fact.
+- **Transcript/video sync**: meeting videos are transcribed for free on
+  GitHub Actions (`.github/workflows/transcribe.yml` → faster-whisper on
+  CPU; a ~3h meeting fits well inside the 6h job limit at $0). Timestamped
+  segments land in `transcript_segments` via a shared-secret machine-ingest
+  endpoint (`POST /meetings/{id}/transcript`, `TRANSCRIPT_INGEST_TOKEN`),
+  and `GET /meetings/{id}/transcript?q=` returns every quote with a
+  `video_link` pointing at its exact moment in the recording.
+- **Deliberately out (for now)**: councilor stance summaries — per the
+  design sketch those ship only with evidence spans and confidence labels,
+  never as unlabeled fact.
 
 ## Schema setup
 
@@ -166,7 +172,7 @@ limitation inherited from the PoC.)
 | 1 — Evidence layer | provenance, hybrid index, item-level parsing, deep links | **shipped** on this branch (vendor-adapter hardening for TGOV/Granicus feeds remains ongoing) |
 | 2 — Grounded Q&A | intent routing, rerank, claim verification, budget tools, gold eval set | **largely shipped**: intent router, budget tools, agent loop, claim verification, contested-issue policy, eval harness seed. Remaining: cross-encoder rerank, gold set expansion from research-day transcripts |
 | 3 — Watches & outreach | ingest-time watch matching, deep-link-first alerts, consent hardening | **largely shipped**: dual-track matching at ingest, deep-link-first messages, signed one-click unsubscribe, feedback review queue. Remaining: digest dispatch loop, alert-retention metrics |
-| 4 — Matters graph | track legislative matters across meetings; optional media | **core shipped**: identifier extraction, cross-meeting timelines, status inference, API + track_matter tool. Remaining: media/transcripts (needs a city A/V source), evidence-labeled stance summaries |
+| 4 — Matters graph | track legislative matters across meetings; optional media | **shipped**: identifier extraction, cross-meeting timelines, status inference, API + track_matter tool, free Actions-based transcript/video sync. Remaining: evidence-labeled stance summaries, transcript↔agenda-item alignment |
 
 The failure modes in the design sketch are the acceptance tests: if budget
 questions are still answered from chunk soup without citations, it isn't an

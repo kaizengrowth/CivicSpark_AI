@@ -94,6 +94,11 @@ class Settings(BaseSettings):
     # notifications (e.g. https://civicspark.vercel.app). Empty = relative.
     frontend_url: str = ""
 
+    # Machine-ingest shared secret for the transcription workflow
+    # (GitHub Actions posts transcripts with this token). Feature is
+    # disabled when unset.
+    transcript_ingest_token: Optional[str] = None
+
     # RAG Configuration
     enable_rag: bool = True
     # Second-pass claim verification on tool-grounded answers (refuse > invent)

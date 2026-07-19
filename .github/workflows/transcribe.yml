@@ -1,0 +1,79 @@
+name: Transcribe Meeting Video
+
+# Free transcript/video sync: runs Whisper on a standard GitHub-hosted
+# runner (no GPU, no paid API). A ~3h council meeting transcribes in
+# roughly 60-90 minutes with the base.en model — well inside the 6h job
+# limit, at zero cost on a public repository.
+#
+# Trigger manually from the Actions tab with the meeting's video URL and
+# its CivicSpark meeting ID. The transcript JSON is always saved as a
+# run artifact; it is also POSTed to the API when the two repository
+# secrets are configured:
+#   CIVICSPARK_API_URL          e.g. https://civicspark-api.onrender.com
+#   TRANSCRIPT_INGEST_TOKEN     must match the API's TRANSCRIPT_INGEST_TOKEN
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: "Meeting video URL (direct mp4 or stream ffmpeg can read)"
+        required: true
+        type: string
+      meeting_id:
+        description: "CivicSpark meeting ID to attach the transcript to"
+        required: true
+        type: string
+      model:
+        description: "Whisper model"
+        required: false
+        default: "base.en"
+        type: choice
+        options: ["tiny.en", "base.en", "small.en"]
+
+jobs:
+  transcribe:
+    name: Transcribe (${{ inputs.model }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 320
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg
+
+      - name: Install transcription dependencies
+        run: pip install --quiet faster-whisper requests
+
+      - name: Transcribe
+        env:
+          CIVICSPARK_API_URL: ${{ secrets.CIVICSPARK_API_URL }}
+          TRANSCRIPT_INGEST_TOKEN: ${{ secrets.TRANSCRIPT_INGEST_TOKEN }}
+        run: |
+          EXTRA_ARGS=""
+          if [ -n "$CIVICSPARK_API_URL" ] && [ -n "$TRANSCRIPT_INGEST_TOKEN" ]; then
+            EXTRA_ARGS="--api-url $CIVICSPARK_API_URL --api-token $TRANSCRIPT_INGEST_TOKEN"
+          else
+            echo "::notice::API secrets not configured - transcript saved as artifact only"
+          fi
+          python scripts/transcribe_meeting.py \
+            --video-url "${{ inputs.video_url }}" \
+            --meeting-id "${{ inputs.meeting_id }}" \
+            --model "${{ inputs.model }}" \
+            --output "transcript-meeting-${{ inputs.meeting_id }}.json" \
+            $EXTRA_ARGS
+
+      - name: Upload transcript artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: transcript-meeting-${{ inputs.meeting_id }}
+          path: transcript-meeting-${{ inputs.meeting_id }}.json
+          retention-days: 90
