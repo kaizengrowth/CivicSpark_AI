@@ -103,7 +103,7 @@ async def search_documents(
 ):
     """Search documents using vector similarity"""
 
-    vector_service = VectorService(settings)
+    vector_service = VectorService(settings, db)
 
     # Build filters
     filters = {}
@@ -291,7 +291,7 @@ async def delete_document(
         raise HTTPException(status_code=404, detail="Document not found")
 
     # Delete from vector store
-    vector_service = VectorService(settings)
+    vector_service = VectorService(settings, db)
     await vector_service.delete_document_chunks(document_id)
 
     # Delete file if it exists

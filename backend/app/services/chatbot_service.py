@@ -31,7 +31,7 @@ class ChatbotService:
             self.client = OpenAI(api_key=settings.openai_api_key)
 
         self.research_service = ResearchService(settings)
-        self.vector_service = VectorService(settings)
+        self.vector_service = VectorService(settings, db)
 
     def get_system_prompt(self) -> str:
         """Get the enhanced system prompt for the chatbot"""
