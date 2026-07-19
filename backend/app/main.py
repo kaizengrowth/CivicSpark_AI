@@ -44,7 +44,8 @@ async def lifespan(app: FastAPI):
     Startup and shutdown events
     """
     # Startup
-    logger.info("Starting up CityCamp AI...")
+    logger.info(f"Starting up {settings.project_name}...")
+    settings.validate_production_settings()
 
     # Try to create tables, but don't fail if database is not ready
     max_retries = 5
@@ -65,7 +66,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    logger.info("Shutting down CityCamp AI...")
+    logger.info(f"Shutting down {settings.project_name}...")
 
 
 # Create FastAPI app
@@ -78,11 +79,13 @@ app = FastAPI(
     redoc_url="/redoc" if settings.debug else None,
 )
 
-# Add CORS middleware
+# Add CORS middleware. Origins come from settings: explicit CORS_ORIGINS in
+# production, local dev servers otherwise. Same-origin traffic through the
+# Vercel /api rewrite needs no CORS at all.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=False,  # Set to False when using allow_origins=["*"]
+    allow_origins=settings.cors_origin_list,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

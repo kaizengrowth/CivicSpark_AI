@@ -1,50 +1,55 @@
+import logging
+import warnings
 from typing import List, Optional
 
-from pydantic import ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_SECRET_KEY = "your-secret-key-here"  # nosec B105 - dev placeholder
+
+# Origins allowed by default during local development.
+DEV_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3007",
+    "http://localhost:5173",
+    "http://127.0.0.1:3007",
+]
 
 
 class Settings(BaseSettings):
-    model_config = ConfigDict(env_file=".env", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=".env", case_sensitive=False, extra="ignore"
+    )
 
-    # Database
+    # Database — the single stateful service in the architecture.
+    # Postgres holds relational data AND the RAG vector index (pgvector).
     database_url: str = "postgresql://user:password@localhost:5435/citycamp_db"
-    database_host: str = "localhost"
-    database_port: int = 5435
-    database_name: str = "citycamp_db"
-    database_user: str = "user"
-    database_password: str = "password"
 
     # Security
-    secret_key: str = "your-secret-key-here"
+    secret_key: str = DEFAULT_SECRET_KEY
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
-    # External APIs
+    # External APIs (all optional — features degrade gracefully without them)
     openai_api_key: Optional[str] = None
     geocodio_api_key: Optional[str] = None
     twilio_account_sid: Optional[str] = None
     twilio_auth_token: Optional[str] = None
     twilio_phone_number: Optional[str] = None
 
-    # Google Custom Search API
+    # Google Custom Search API (optional web-research capability)
     google_api_key: Optional[str] = None
     google_cse_id: Optional[str] = None
 
-    # AWS
+    # File storage: local disk by default; set to "s3" only if AWS is configured
+    storage_backend: str = "local"
+    storage_dir: str = "./storage"
     aws_region: str = "us-east-1"
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
     aws_s3_bucket: str = "citycamp-assets"
 
-    # Vector Database
-    pinecone_api_key: Optional[str] = None
-    pinecone_environment: Optional[str] = None
-    pinecone_index_name: str = "citycamp-ai"
-
-    # Redis
-    redis_url: str = "redis://localhost:6379"
-    
     # City Data Sources
     tulsa_city_council_api_url: str = "https://api.tulsacouncil.org"
     tulsa_city_council_api_key: Optional[str] = None
@@ -59,13 +64,15 @@ class Settings(BaseSettings):
     from_email: Optional[str] = None
 
     # Application
-    project_name: str = "CityCamp AI"
-    project_description: str = "CityCamp AI Backend API"
-    project_version: str = "1.0.0"
+    project_name: str = "CivicSpark AI"
+    project_description: str = "CivicSpark AI Backend API"
+    project_version: str = "2.0.0"
     api_version: str = "v1"
     environment: str = "development"
     debug: bool = True
-    cors_origins: List[str] = ["*"]
+
+    # Comma-separated list, e.g. "https://civicspark.vercel.app,https://civicspark.org"
+    cors_origins: str = ""
 
     # RAG Configuration
     enable_rag: bool = True
@@ -74,15 +81,27 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 200
 
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
 
-    
+    @property
+    def cors_origin_list(self) -> List[str]:
+        """Resolved CORS origins.
 
-    
-
-    
-
-    
-
+        Explicit origins from the CORS_ORIGINS env var always win. Without
+        them, development allows common local dev servers; production allows
+        nothing cross-origin (same-origin requests via the Vercel /api rewrite
+        don't need CORS at all).
+        """
+        configured = [
+            origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
+        ]
+        if configured:
+            return configured
+        if self.is_production:
+            return []
+        return DEV_CORS_ORIGINS
 
     @property
     def is_openai_configured(self) -> bool:
@@ -92,6 +111,17 @@ class Settings(BaseSettings):
             and self.openai_api_key.strip() != ""
             and not self.openai_api_key.startswith("sk-placeholder")
         )
+
+    def validate_production_settings(self) -> None:
+        """Fail fast on unsafe production configuration"""
+        if not self.is_production:
+            return
+        if self.secret_key == DEFAULT_SECRET_KEY or len(self.secret_key) < 32:
+            raise ValueError(
+                "SECRET_KEY must be set to a strong value (32+ chars) in production"
+            )
+        if self.debug:
+            warnings.warn("DEBUG should be disabled in production", stacklevel=1)
 
 
 settings = Settings()
