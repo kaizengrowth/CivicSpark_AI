@@ -1,5 +1,6 @@
 from app.core.database import Base
 from sqlalchemy import (
+    JSON,
     Column,
     DateTime,
     Float,
@@ -37,6 +38,10 @@ class TranscriptSegment(Base):
     # Optional link to the agenda item under discussion (future: aligned
     # via item timestamps when the source publishes them).
     agenda_item_id = Column(Integer, ForeignKey("agenda_items.id"), nullable=True)
+
+    # Translations keyed by language code, e.g. {"es": "..."} — produced
+    # by the enrichment step of the media pipeline.
+    translations = Column(JSON, default=dict)
 
     # Provenance: which model produced this segment.
     source_model = Column(String(100))  # e.g. "faster-whisper/base.en"

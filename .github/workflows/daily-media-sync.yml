@@ -1,0 +1,117 @@
+name: Daily Media Sync
+
+# Pulls new meeting videos from Granicus (TGOV) every day, transcribes
+# them with Whisper on free runners, translates the transcript to
+# Spanish, and stores an LLM analysis into the platform's topic
+# categories. Everything runs on GitHub's free compute; the only paid
+# dependency is nothing.
+#
+# Required repository secrets:
+#   CIVICSPARK_API_URL       e.g. https://civicspark-api.onrender.com
+#   TRANSCRIPT_INGEST_TOKEN  must match the API deployment's setting
+# Optional (enables translation + analysis):
+#   LLM_API_KEY              Groq (or any OpenAI-compatible provider)
+# Optional overrides:
+#   GRANICUS_VIEW_IDS        comma-separated view ids (default "4")
+
+on:
+  schedule:
+    - cron: '0 11 * * *'   # daily, ~6am Central
+  workflow_dispatch:
+
+jobs:
+  discover:
+    name: Discover new videos
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.match.outputs.matrix }}
+      has_jobs: ${{ steps.match.outputs.has_jobs }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install --quiet requests
+
+      - name: Match Granicus feed to pending meetings
+        id: match
+        env:
+          CIVICSPARK_API_URL: ${{ secrets.CIVICSPARK_API_URL }}
+          GRANICUS_VIEW_IDS: ${{ vars.GRANICUS_VIEW_IDS || '4' }}
+        run: |
+          if [ -z "$CIVICSPARK_API_URL" ]; then
+            echo "::warning::CIVICSPARK_API_URL secret not set - nothing to sync"
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            echo 'has_jobs=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python scripts/discover_granicus_videos.py \
+            --api-url "$CIVICSPARK_API_URL" \
+            --view-ids "$GRANICUS_VIEW_IDS" \
+            --max-jobs 2 \
+            --output matrix.json
+          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
+          if [ "$(python -c 'import json;print(len(json.load(open("matrix.json"))["include"]))')" != "0" ]; then
+            echo 'has_jobs=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'has_jobs=false' >> "$GITHUB_OUTPUT"
+          fi
+
+  process:
+    name: "Transcribe + enrich: ${{ matrix.title }}"
+    needs: discover
+    if: needs.discover.outputs.has_jobs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 320
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg
+
+      - name: Install dependencies
+        run: pip install --quiet faster-whisper requests openai
+
+      - name: Transcribe
+        run: |
+          python scripts/transcribe_meeting.py \
+            --video-url "${{ matrix.video_url }}" \
+            --meeting-id "${{ matrix.meeting_id }}" \
+            --model base.en \
+            --output "transcript-meeting-${{ matrix.meeting_id }}.json"
+
+      - name: Translate, analyze, and upload
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+        run: |
+          python scripts/enrich_transcript.py \
+            --transcript "transcript-meeting-${{ matrix.meeting_id }}.json" \
+            --meeting-id "${{ matrix.meeting_id }}" \
+            --languages es \
+            --api-url "${{ secrets.CIVICSPARK_API_URL }}" \
+            --api-token "${{ secrets.TRANSCRIPT_INGEST_TOKEN }}"
+
+      - name: Upload transcript artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transcript-meeting-${{ matrix.meeting_id }}
+          path: transcript-meeting-${{ matrix.meeting_id }}.json
+          retention-days: 90

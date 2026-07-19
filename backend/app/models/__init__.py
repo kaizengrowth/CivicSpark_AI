@@ -6,6 +6,7 @@ from .campaign import (
     CampaignUpdate,
     Representative,
 )
+from .comment import MeetingComment
 from .document import (
     Document,
     DocumentChunk,
@@ -32,6 +33,7 @@ __all__ = [
     "Matter",
     "MatterAppearance",
     "TranscriptSegment",
+    "MeetingComment",
     "Document",
     "DocumentChunk",
     "DocumentCollection",

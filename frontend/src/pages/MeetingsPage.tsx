@@ -8,6 +8,7 @@ import { getEnvironmentConfig, getDevModeDisplayText, getApiRetryButtonText, get
 import { PageHeader } from '@/components/PageHeader';
 
 import { ImageCarousel } from '../components/ImageCarousel';
+import { MeetingMediaPanel } from '../components/MeetingMediaPanel';
 import { PDFViewer } from '../components/PDFViewer';
 import { createOpenInNewTabHandler } from '../utils/pdfUtils';
 
@@ -854,6 +855,9 @@ export const MeetingsPage: React.FC = () => {
               </div>
 
               <div className="max-h-[600px] overflow-y-auto">
+                {/* Video, transcript, translations, and resident comments */}
+                <MeetingMediaPanel meetingId={selectedMeeting.id} />
+
                 {/* Meeting Summary */}
                 {selectedMeeting.summary && (
                   <div className="p-6 border-b border-gray-200">
