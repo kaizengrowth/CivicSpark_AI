@@ -1,15 +1,20 @@
 import asyncio
 import json
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from app.core.config import Settings
 from app.core.llm import get_chat_client
 from app.models.campaign import Campaign
 from app.models.document import Document
-from app.models.meeting import Meeting
+from app.models.meeting import AgendaItem, Meeting
+from app.services.agenda_parser import normalize_item_number
+from app.services.budget_service import format_budget_lines, lookup_budget_lines
+from app.services.intent_router import classify_intent
 from app.services.research_service import ResearchService
 from app.services.vector_service import VectorService
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -40,7 +45,8 @@ class ChatbotService:
 You have extensive knowledge about Tulsa government, civic processes, city services, local politics, and community engagement opportunities. Feel free to provide detailed, conversational responses that help people understand and get involved in their local government.
 
 RESPONSE APPROACH:
-- **Never invent specific figures, vote outcomes, or ordinance text.** For dollar amounts, budget lines, or what the law says, use document search and cite the source; if the corpus doesn't contain the answer, say so plainly and point to the official source (cityoftulsa.org, tulsacouncil.org) instead of guessing
+- **Never invent specific figures, vote outcomes, or ordinance text.** For dollar amounts use the lookup_budget_line tool; for what Council did use document search and get_agenda_item; cite the source. If the corpus doesn't contain the answer, say so plainly and point to the official source (cityoftulsa.org, tulsacouncil.org) instead of guessing
+- **Contested topics** (housing, policing, public safety, budgets, accountability): do not soft-pedal, evade, or take sides. Present what Council actually did (with citations) as distinct from what advocates or officials claim; surface staff reports and public comment records when they exist in the corpus; if the corpus only covers one side, say so. You serve residents' right to know, not the city's narrative
 - Be conversational, helpful, and encouraging
 - Provide as much detail as needed to fully answer questions
 - Use your knowledge to give comprehensive, nuanced responses
@@ -412,6 +418,83 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
                     "required": ["url"],
                 },
             },
+            {
+                "name": "lookup_budget_line",
+                "description": (
+                    "Look up exact dollar figures from the structured city "
+                    "budget table. ALWAYS use this for budget amounts - "
+                    "never state a dollar figure that did not come from "
+                    "this tool or a cited document."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "fiscal_year": {
+                            "type": "string",
+                            "description": "Fiscal year, e.g. FY2026 or 2025-2026",
+                        },
+                        "fund": {
+                            "type": "string",
+                            "description": "Fund name, e.g. General Fund",
+                        },
+                        "department": {
+                            "type": "string",
+                            "description": "Department, e.g. Police, Parks",
+                        },
+                        "keyword": {
+                            "type": "string",
+                            "description": "Keyword over line descriptions/categories",
+                        },
+                    },
+                },
+            },
+            {
+                "name": "get_agenda_item",
+                "description": (
+                    "Get the canonical record for one agenda item of a "
+                    "meeting: title, vote result, and deep link. Use when "
+                    "the user asks what happened with a specific item."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "meeting_id": {
+                            "type": "integer",
+                            "description": "Meeting ID",
+                        },
+                        "item_number": {
+                            "type": "string",
+                            "description": "Agenda item number, e.g. '2.a'",
+                        },
+                    },
+                    "required": ["meeting_id"],
+                },
+            },
+            {
+                "name": "search_meetings",
+                "description": (
+                    "Find city council meetings by topic keyword and date "
+                    "range. Returns meeting titles, dates, and deep links."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "topic": {
+                            "type": "string",
+                            "description": "Topic or keyword, e.g. housing, curfew",
+                        },
+                        "date_from": {
+                            "type": "string",
+                            "description": "Earliest meeting date, ISO format",
+                        },
+                        "date_to": {
+                            "type": "string",
+                            "description": "Latest meeting date, ISO format",
+                        },
+                    },
+                    "required": ["topic"],
+                },
+            },
         ]
 
     async def process_function_call(
@@ -512,12 +595,115 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
                 document = await self.research_service.retrieve_document(url)
                 return self.research_service.format_document_content(document)
 
+            elif function_name == "lookup_budget_line":
+                lines = lookup_budget_lines(
+                    self.db,
+                    fiscal_year=arguments.get("fiscal_year"),
+                    fund=arguments.get("fund"),
+                    department=arguments.get("department"),
+                    keyword=arguments.get("keyword"),
+                )
+                return format_budget_lines(lines)
+
+            elif function_name == "get_agenda_item":
+                return self._get_agenda_item(
+                    arguments.get("meeting_id"), arguments.get("item_number")
+                )
+
+            elif function_name == "search_meetings":
+                return self._search_meetings(
+                    arguments.get("topic", ""),
+                    arguments.get("date_from"),
+                    arguments.get("date_to"),
+                )
+
             else:
                 return f"Unknown function: {function_name}"
 
         except Exception as e:
             logger.error(f"Error processing function call {function_name}: {e}")
             return f"Error executing {function_name}: {str(e)}"
+
+    def _get_agenda_item(self, meeting_id, item_number) -> str:
+        """Canonical agenda-item record for the get_agenda_item tool"""
+        if not meeting_id:
+            return "meeting_id is required."
+
+        query = self.db.query(AgendaItem).filter(AgendaItem.meeting_id == meeting_id)
+        item = None
+        if item_number:
+            wanted = normalize_item_number(str(item_number))
+            for candidate in query.all():
+                if (
+                    candidate.item_number
+                    and normalize_item_number(candidate.item_number) == wanted
+                ):
+                    item = candidate
+                    break
+        else:
+            item = query.first()
+
+        if item is None:
+            return (
+                f"No agenda item matching '{item_number}' found for meeting "
+                f"{meeting_id}. Do not guess its outcome."
+            )
+
+        meeting = self.db.query(Meeting).filter(Meeting.id == meeting_id).first()
+        result = f"Agenda item {item.item_number or item.id}: {item.title}\n"
+        if meeting:
+            result += (
+                f"Meeting: {meeting.title} on "
+                f"{meeting.meeting_date.strftime('%B %d, %Y')}\n"
+            )
+        if item.description:
+            result += f"Description: {item.description[:400]}\n"
+        if item.vote_result:
+            result += f"Vote result: {item.vote_result}\n"
+        if item.vote_details:
+            result += f"Vote details: {json.dumps(item.vote_details)[:400]}\n"
+        if item.summary:
+            result += f"Summary: {item.summary[:400]}\n"
+        result += f"Deep link: /meetings?meeting={meeting_id}\n"
+        return result
+
+    def _search_meetings(self, topic: str, date_from, date_to) -> str:
+        """Temporal meeting browse for the search_meetings tool"""
+        if not topic.strip():
+            return "topic is required."
+
+        pattern = f"%{topic}%"
+        query = self.db.query(Meeting).filter(
+            or_(
+                Meeting.title.ilike(pattern),
+                Meeting.summary.ilike(pattern),
+                Meeting.description.ilike(pattern),
+            )
+        )
+        try:
+            if date_from:
+                query = query.filter(
+                    Meeting.meeting_date >= datetime.fromisoformat(date_from)
+                )
+            if date_to:
+                query = query.filter(
+                    Meeting.meeting_date <= datetime.fromisoformat(date_to)
+                )
+        except ValueError:
+            return "Dates must be in ISO format (YYYY-MM-DD)."
+
+        meetings = query.order_by(Meeting.meeting_date.desc()).limit(5).all()
+        if not meetings:
+            return f"No meetings matching '{topic}' in the indexed record."
+
+        result = f"Meetings matching '{topic}':\n"
+        for meeting in meetings:
+            result += (
+                f"- {meeting.title} — "
+                f"{meeting.meeting_date.strftime('%B %d, %Y')} "
+                f"(deep link: /meetings?meeting={meeting.id})\n"
+            )
+        return result
 
     def _get_context_from_recent_meetings(self) -> str:
         """Get context from recent meetings to help answer questions"""
@@ -584,18 +770,26 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
 
             system_prompt = self.get_system_prompt()
 
-            # Skip database context queries for faster responses
-            # TODO: Re-enable when database performance is optimized
-            # meeting_context = self._get_context_from_recent_meetings()
-            # campaign_context = self._get_context_from_campaigns()
-
-            # Build messages for OpenAI
+            # Build messages
             messages = [
                 {
                     "role": "system",
                     "content": system_prompt,
                 }
             ]
+
+            # Route intent: budget facts go to the structured budget tool,
+            # outcome questions to minutes, etc. The guidance rides along
+            # as a system message rather than forcing tool_choice, so the
+            # model can still decline gracefully.
+            intent = classify_intent(user_message)
+            if intent.guidance:
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": f"[intent: {intent.name}] {intent.guidance}",
+                    }
+                )
 
             # Add conversation history if provided
             if conversation_history:
@@ -613,44 +807,87 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
             messages.append({"role": "user", "content": user_message})
 
             logger.info(
-                f"Calling {self.model} with {len(messages)} messages..."
+                f"Calling {self.model} (intent: {intent.name}) with "
+                f"{len(messages)} messages..."
             )
 
-            # Enable tool-calling RAG only when configured
-            if self.settings.enable_rag:
-                response = self.client.chat.completions.create(
+            # Agent loop: the model may call tools; results are fed back so
+            # the final answer is synthesized WITH its evidence, instead of
+            # dumping raw tool output at the user.
+            evidence: List[str] = []
+            ai_response = None
+            max_tool_rounds = 3
+
+            for round_index in range(max_tool_rounds + 1):
+                tools_enabled = (
+                    self.settings.enable_rag and round_index < max_tool_rounds
+                )
+                request_kwargs: Dict[str, Any] = dict(
                     model=self.model,
                     messages=messages,
                     max_tokens=800,
                     temperature=0.7,
-                    tools=self.get_tool_definitions(),
-                    tool_choice="auto",
                 )
-            else:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    max_tokens=800,
-                    temperature=0.7,
+                if tools_enabled:
+                    request_kwargs["tools"] = self.get_tool_definitions()
+                    request_kwargs["tool_choice"] = "auto"
+
+                response = self.client.chat.completions.create(**request_kwargs)
+                message = response.choices[0].message
+                tool_calls = getattr(message, "tool_calls", None)
+
+                if not (tools_enabled and tool_calls):
+                    ai_response = (message.content or "").strip()
+                    break
+
+                # Execute the requested tools and feed results back.
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": message.content or "",
+                        "tool_calls": [
+                            {
+                                "id": tool_call.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_call.function.name,
+                                    "arguments": tool_call.function.arguments,
+                                },
+                            }
+                            for tool_call in tool_calls
+                        ],
+                    }
                 )
-
-            message = response.choices[0].message
-
-            # If the model requested a tool, execute it (RAG path)
-            tool_calls = getattr(message, "tool_calls", None)
-            if self.settings.enable_rag and tool_calls:
-                try:
-                    tool_call = tool_calls[0]
+                for tool_call in tool_calls:
                     fn_name = tool_call.function.name
-                    args_json = tool_call.function.arguments or "{}"
-                    args = json.loads(args_json)
+                    try:
+                        args = json.loads(tool_call.function.arguments or "{}")
+                    except json.JSONDecodeError:
+                        args = {}
                     tool_result = await self.process_function_call(fn_name, args)
-                    return tool_result
-                except Exception as e:
-                    logger.error(f"Tool call handling failed: {e}")
+                    evidence.append(f"[{fn_name}]\n{tool_result}")
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": tool_result,
+                        }
+                    )
 
-            # Fall back to normal assistant content
-            ai_response = message.content.strip()
+            if not ai_response:
+                # Tool budget exhausted without a final answer: show the
+                # gathered evidence rather than nothing.
+                ai_response = (
+                    evidence[-1]
+                    if evidence
+                    else self._get_fallback_response(user_message)
+                )
+
+            # Verification pass: drop or hedge claims the evidence doesn't
+            # support (refuse > invent). Only runs when evidence was
+            # gathered - purely conversational replies skip it.
+            if evidence and self.settings.enable_claim_verification:
+                ai_response = await self._verify_answer(ai_response, evidence)
 
             logger.info(f"Generated AI response: {ai_response[:100]}...")
             return ai_response
@@ -672,6 +909,56 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
                 logger.error(f"Error getting AI response: {error_message}")
 
             return self._get_fallback_response(user_message)
+
+    async def _verify_answer(self, draft: str, evidence: List[str]) -> str:
+        """Claim-verification pass: refuse > invent.
+
+        A second model call checks the draft against the gathered tool
+        evidence and rewrites it to keep only supported factual claims.
+        Fails open (returns the draft) if the check itself errors, so an
+        outage degrades to today's behavior rather than silence.
+        """
+        try:
+            evidence_text = "\n\n---\n\n".join(evidence)[:8000]
+            response = self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=800,
+                temperature=0.0,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a strict fact-checker for a civic "
+                            "information service. You receive EVIDENCE "
+                            "(tool outputs from official city data) and a "
+                            "DRAFT answer. Rewrite the draft so that every "
+                            "specific factual claim - dollar amounts, vote "
+                            "outcomes, dates, ordinance numbers, names of "
+                            "actions taken - is supported by the evidence. "
+                            "Remove or clearly hedge unsupported claims. "
+                            "Keep supported content, citations, links, and "
+                            "the helpful tone unchanged. If the core answer "
+                            "is not supported by the evidence, reply that "
+                            "the indexed record does not answer the "
+                            "question and point to official sources "
+                            "(cityoftulsa.org, tulsacouncil.org). Output "
+                            "only the final answer text."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"EVIDENCE:\n{evidence_text}\n\n"
+                            f"DRAFT:\n{draft}"
+                        ),
+                    },
+                ],
+            )
+            verified = (response.choices[0].message.content or "").strip()
+            return verified or draft
+        except Exception as e:
+            logger.warning(f"Claim verification failed open: {e}")
+            return draft
 
     def _get_fallback_response(self, user_message: str) -> str:
         """Provide fallback responses when OpenAI is not available"""

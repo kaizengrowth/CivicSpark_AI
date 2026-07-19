@@ -82,6 +82,32 @@ corpus (the pgvector column is sized from config on fresh databases).
   journalists and organizers, extends this corpus without changing the
   harness.
 
+## Grounded Q&A (Iteration 2)
+
+- **Intent routing** (`app/services/intent_router.py`): deterministic
+  best-match classification (budget_fact, meeting_outcome, contact_rep,
+  subscribe_topic, process_how_to) steers each query to the right evidence
+  before any model call.
+- **Numbers from table cells**: the `budget_lines` table (admin CSV import,
+  `/api/v1/budget/*`) is the only source the chatbot may cite dollar figures
+  from, via the `lookup_budget_line` tool — every row keeps its source
+  document/page. No matching row → the tool says "do not guess" and links
+  the official budget documents.
+- **Multi-tool agent loop**: tool results (document search, budget lookup,
+  `get_agenda_item`, `search_meetings`) are fed back to the model, which
+  synthesizes a cited answer — no more raw tool dumps as responses.
+- **Claim verification** (`ENABLE_CLAIM_VERIFICATION`, on by default): a
+  second, temperature-0 pass checks the draft against the gathered evidence
+  and removes or hedges unsupported claims; if the core answer is
+  unsupported, it refuses and points to official sources. Fails open on
+  errors.
+- **Contested-issue policy** (in the system prompt): no soft-pedaling or
+  evasion on housing, policing, budgets, or accountability — present what
+  Council actually did (cited) as distinct from claims about it, surface
+  staff reports and public comment where indexed, and disclose one-sided
+  corpus coverage. The platform serves residents' right to know, not the
+  city's narrative.
+
 ## Schema setup
 
 Fresh databases bootstrap via `create_tables()` (SQLAlchemy `create_all`) at
@@ -97,7 +123,7 @@ limitation inherited from the PoC.)
 | Iteration | Scope | Status |
 |---|---|---|
 | 1 — Evidence layer | provenance, hybrid index, item-level parsing, deep links | **shipped** on this branch (vendor-adapter hardening for TGOV/Granicus feeds remains ongoing) |
-| 2 — Grounded Q&A | intent routing, rerank, claim verification, budget tools, gold eval set | eval harness seeded (`test_retrieval_eval.py`); the rest specced in the design sketch |
+| 2 — Grounded Q&A | intent routing, rerank, claim verification, budget tools, gold eval set | **largely shipped**: intent router, budget tools, agent loop, claim verification, contested-issue policy, eval harness seed. Remaining: cross-encoder rerank, gold set expansion from research-day transcripts |
 | 3 — Watches & outreach | ingest-time watch matching, deep-link-first alerts, consent hardening | PoC subscriptions exist; precision work pending |
 | 4 — Matters graph | track legislative matters across meetings; optional media | not started |
 

@@ -1,3 +1,4 @@
+from .budget import BudgetLine
 from .campaign import (
     Campaign,
     CampaignMembership,
@@ -18,6 +19,7 @@ from .subscription import MeetingTopic, NotificationLog, TopicSubscription
 from .user import User, UserInterests
 
 __all__ = [
+    "BudgetLine",
     "User",
     "UserInterests",
     "Meeting",
