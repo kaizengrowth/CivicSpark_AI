@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 from app.core.config import settings
-from app.core.database import create_tables
+from app.core.database import create_tables, ensure_pgvector
 from app.core.exceptions import (
     CityCampException,
     citycamp_exception_handler,
@@ -53,6 +53,7 @@ async def lifespan(app: FastAPI):
         try:
             create_tables()
             logger.info("Database tables created/verified")
+            ensure_pgvector()
             break
         except Exception as e:
             logger.warning(f"Database connection attempt {attempt + 1} failed: {e}")
