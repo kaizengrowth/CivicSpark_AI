@@ -61,11 +61,26 @@ corpus (the pgvector column is sized from config on fresh databases).
 - **Hybrid retrieval**: dense (pgvector or numpy) ∪ keyword (Postgres FTS
   with GIN index; ILIKE fallback elsewhere), fused with reciprocal-rank
   fusion. Keyword search alone works with zero LLM keys — search before chat.
-- **Citations**: chat document excerpts carry source title, link, and
-  retrieval date. The system prompt forbids inventing figures, votes, or
-  ordinance text: search and cite, or say the corpus lacks the answer.
+- **Legislative identity, not chunk soup**: agendas and minutes are parsed
+  into their agenda tree (`app/services/agenda_parser.py`) and chunked per
+  item; every chunk carries `meeting_id` / `agenda_item_id` / `item_number`,
+  and those keys flow through search-result metadata. Unstructured documents
+  fall back to fixed windows.
+- **Deep links**: `GET /api/v1/meetings/{id}/items[/{item_id}]` is the
+  canonical item record (structured fields + linked excerpts), and the
+  meeting explorer keeps the selected meeting in the URL (`?meeting=<id>`),
+  so citations and alerts land on the item, not the homepage.
+- **Citations**: chat document excerpts carry source title, link, retrieval
+  date, and a meeting-record deep link when identity is known. The system
+  prompt forbids inventing figures, votes, or ordinance text: search and
+  cite, or say the corpus lacks the answer.
 - **Human-gated outreach**: representative emails are drafted and returned
   for review; the platform never sends on a user's behalf.
+- **Eval seed**: `tests/backend/test_retrieval_eval.py` runs a frozen gold
+  set (deterministic embeddings, no network) in CI — recall assertions fail
+  the build when retrieval regresses. The real gold set, co-written with
+  journalists and organizers, extends this corpus without changing the
+  harness.
 
 ## Schema setup
 
@@ -81,8 +96,8 @@ limitation inherited from the PoC.)
 
 | Iteration | Scope | Status |
 |---|---|---|
-| 1 — Evidence layer | provenance, hybrid index, item deep links | **partially shipped** (this branch: provenance, hybrid index, freshness); agenda-item-level parsing still pending |
-| 2 — Grounded Q&A | intent routing, rerank, claim verification, budget tools, gold eval set | specced in the design sketch |
+| 1 — Evidence layer | provenance, hybrid index, item-level parsing, deep links | **shipped** on this branch (vendor-adapter hardening for TGOV/Granicus feeds remains ongoing) |
+| 2 — Grounded Q&A | intent routing, rerank, claim verification, budget tools, gold eval set | eval harness seeded (`test_retrieval_eval.py`); the rest specced in the design sketch |
 | 3 — Watches & outreach | ingest-time watch matching, deep-link-first alerts, consent hardening | PoC subscriptions exist; precision work pending |
 | 4 — Matters graph | track legislative matters across meetings; optional media | not started |
 
