@@ -27,7 +27,7 @@ def test_root_endpoint():
     assert response.status_code == 200
     data = response.json()
     assert "message" in data
-    assert "CityCamp AI" in data["message"]
+    assert "CivicSpark AI" in data["message"]
 
 def test_api_v1_meetings_endpoint():
     """Test the API v1 meetings endpoint."""
