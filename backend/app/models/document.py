@@ -34,6 +34,9 @@ class Document(Base):
     # Provenance: never index without knowing what was fetched and when.
     content_hash = Column(String(64), index=True)  # sha256 of the source file
     retrieved_at = Column(DateTime(timezone=True))  # when the source was fetched
+
+    # Legislative identity: agendas/minutes belong to a specific meeting.
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True, index=True)
     file_path = Column(String(1000))  # Local file storage path
     file_name = Column(String(500))
     file_size = Column(Integer)  # Size in bytes
@@ -109,6 +112,15 @@ class DocumentChunk(Base):
     # Chunk content
     content = Column(Text, nullable=False)  # The actual text chunk
     chunk_index = Column(Integer, nullable=False)  # Order within document
+
+    # Legislative identity keys: "what did Council decide on X?" is an
+    # identity query, so chunks keep their meeting/agenda-item lineage
+    # instead of being anonymous token windows.
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True, index=True)
+    agenda_item_id = Column(
+        Integer, ForeignKey("agenda_items.id"), nullable=True, index=True
+    )
+    item_number = Column(String(50))  # e.g. "2.a" — kept even when unmatched
 
     # Chunk metadata
     start_page = Column(Integer)  # Starting page number

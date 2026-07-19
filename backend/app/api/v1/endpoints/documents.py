@@ -160,6 +160,9 @@ async def upload_document(
     document_date: Optional[str] = Form(None),  # ISO format date
     effective_date: Optional[str] = Form(None),  # ISO format date
     source_url: Optional[str] = Form(None),
+    meeting_id: Optional[int] = Form(
+        None, description="Meeting this agenda/minutes document belongs to"
+    ),
     is_public: bool = Form(True),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -219,6 +222,7 @@ async def upload_document(
             "document_date": doc_date,
             "effective_date": eff_date,
             "source_url": source_url or "",
+            "meeting_id": meeting_id,
             "is_public": is_public,
             "uploaded_by": current_user.id,
         }

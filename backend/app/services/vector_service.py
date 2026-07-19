@@ -224,6 +224,7 @@ class VectorService:
             text(
                 "SELECT dc.document_id, dc.chunk_index, dc.content, "
                 "d.document_type, d.category, dc.section_title, dc.word_count, "
+                "dc.meeting_id, dc.agenda_item_id, dc.item_number, "
                 "ts_rank(to_tsvector('english', dc.content), "
                 "        plainto_tsquery('english', :q)) AS rank "
                 "FROM document_chunks dc "
@@ -280,6 +281,9 @@ class VectorService:
                         "category": document.category,
                         "section_title": chunk.section_title,
                         "word_count": chunk.word_count,
+                        "meeting_id": chunk.meeting_id,
+                        "agenda_item_id": chunk.agenda_item_id,
+                        "item_number": chunk.item_number,
                     },
                 )
             )
@@ -311,6 +315,7 @@ class VectorService:
             text(
                 "SELECT dc.document_id, dc.chunk_index, dc.content, "
                 "d.document_type, d.category, dc.section_title, dc.word_count, "
+                "dc.meeting_id, dc.agenda_item_id, dc.item_number, "
                 "1 - (dc.embedding <=> CAST(:qvec AS vector)) AS similarity "
                 "FROM document_chunks dc "
                 "JOIN documents d ON d.id = dc.document_id "
@@ -370,6 +375,9 @@ class VectorService:
                         "category": document.category,
                         "section_title": chunk.section_title,
                         "word_count": chunk.word_count,
+                        "meeting_id": chunk.meeting_id,
+                        "agenda_item_id": chunk.agenda_item_id,
+                        "item_number": chunk.item_number,
                     },
                 )
             )
@@ -435,6 +443,9 @@ def _format_result(row: Dict[str, Any], similarity: float) -> Dict[str, Any]:
             "category": row.get("category") or "",
             "section_title": row.get("section_title") or "",
             "word_count": row.get("word_count") or 0,
+            "meeting_id": row.get("meeting_id"),
+            "agenda_item_id": row.get("agenda_item_id"),
+            "item_number": row.get("item_number"),
         },
         "distance": 1.0 - similarity,
         "similarity": similarity,
