@@ -1,6 +1,6 @@
-import os
 from pathlib import Path
 
+from app.core.config import settings
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
@@ -8,10 +8,7 @@ router = APIRouter()
 
 # NOTE: This endpoint is primarily for backward compatibility.
 # New meeting images are served directly from GitHub raw URLs.
-# Base directory for meeting images - use absolute path
-IMAGES_BASE_DIR = Path(
-    "/Users/kailin/Desktop/CityCamp_AI/backend/storage/meeting-images"
-)
+IMAGES_BASE_DIR = Path(settings.storage_dir) / "meeting-images"
 
 
 @router.get("/{year}/{month}/{day}/{meeting_folder}/{image_name}")
