@@ -156,19 +156,135 @@ class VectorService:
     async def search_documents(
         self, query: str, top_k: int = 5, filters: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
-        """Semantic search over stored chunks; returns the top_k matches"""
+        """Hybrid search over stored chunks; returns the top_k matches.
+
+        Dense (semantic) and keyword (full-text) candidates are fused with
+        reciprocal-rank fusion. Keyword search alone still works when no
+        embedding provider is configured, so browse/search stays alive even
+        with zero LLM keys.
+        """
+        candidate_k = max(top_k * 3, 15)
         query_embedding = await self.embedding_service.generate_embedding(query)
-        if not query_embedding:
-            return []
 
         try:
             with self._session() as db:
-                if self._has_pgvector(db):
-                    return self._search_pgvector(db, query_embedding, top_k, filters)
-                return self._search_python(db, query_embedding, top_k, filters)
+                dense: List[Dict[str, Any]] = []
+                if query_embedding:
+                    if self._has_pgvector(db):
+                        dense = self._search_pgvector(
+                            db, query_embedding, candidate_k, filters
+                        )
+                    else:
+                        dense = self._search_python(
+                            db, query_embedding, candidate_k, filters
+                        )
+                keyword = self._search_keyword(db, query, candidate_k, filters)
+                return _fuse_results(dense, keyword, top_k)
         except Exception as e:
             logger.error(f"Error searching documents: {e}")
             return []
+
+    def _search_keyword(
+        self,
+        db: Session,
+        query: str,
+        top_k: int,
+        filters: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Full-text keyword search: Postgres FTS, or ILIKE elsewhere"""
+        try:
+            if db.get_bind().dialect.name == "postgresql":
+                return self._search_fts(db, query, top_k, filters)
+            return self._search_ilike(db, query, top_k, filters)
+        except Exception as e:
+            logger.warning(f"Keyword search failed: {e}")
+            return []
+
+    def _search_fts(
+        self,
+        db: Session,
+        query: str,
+        top_k: int,
+        filters: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        where = [
+            "d.is_public = TRUE",
+            "to_tsvector('english', dc.content) @@ plainto_tsquery('english', :q)",
+        ]
+        params: Dict[str, Any] = {"q": query, "top_k": top_k}
+        if filters:
+            if filters.get("document_type"):
+                where.append("d.document_type = :document_type")
+                params["document_type"] = filters["document_type"]
+            if filters.get("category"):
+                where.append("d.category = :category")
+                params["category"] = filters["category"]
+
+        rows = db.execute(
+            text(
+                "SELECT dc.document_id, dc.chunk_index, dc.content, "
+                "d.document_type, d.category, dc.section_title, dc.word_count, "
+                "ts_rank(to_tsvector('english', dc.content), "
+                "        plainto_tsquery('english', :q)) AS rank "
+                "FROM document_chunks dc "
+                "JOIN documents d ON d.id = dc.document_id "
+                f"WHERE {' AND '.join(where)} "
+                "ORDER BY rank DESC "
+                "LIMIT :top_k"
+            ),
+            params,
+        ).mappings()
+
+        return [_format_result(dict(row), min(row["rank"], 1.0)) for row in rows]
+
+    def _search_ilike(
+        self,
+        db: Session,
+        query: str,
+        top_k: int,
+        filters: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Portable keyword fallback: rank by number of matched terms"""
+        terms = [t for t in query.lower().split() if len(t) > 2]
+        if not terms:
+            return []
+
+        from sqlalchemy import or_
+
+        query_db = (
+            db.query(DocumentChunk, Document)
+            .join(Document, Document.id == DocumentChunk.document_id)
+            .filter(Document.is_public.is_(True))
+            .filter(or_(*[DocumentChunk.content.ilike(f"%{t}%") for t in terms]))
+        )
+        if filters:
+            if filters.get("document_type"):
+                query_db = query_db.filter(
+                    Document.document_type == filters["document_type"]
+                )
+            if filters.get("category"):
+                query_db = query_db.filter(Document.category == filters["category"])
+
+        scored = []
+        for chunk, document in query_db.limit(top_k * 5):
+            content_lower = chunk.content.lower()
+            hits = sum(1 for t in terms if t in content_lower)
+            scored.append(
+                (
+                    hits / len(terms),
+                    {
+                        "document_id": chunk.document_id,
+                        "chunk_index": chunk.chunk_index,
+                        "content": chunk.content,
+                        "document_type": document.document_type,
+                        "category": document.category,
+                        "section_title": chunk.section_title,
+                        "word_count": chunk.word_count,
+                    },
+                )
+            )
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return [_format_result(row, score) for score, row in scored[:top_k]]
 
     def _search_pgvector(
         self,
@@ -277,6 +393,28 @@ class VectorService:
         except Exception as e:
             logger.error(f"Error deleting chunk embeddings: {e}")
             return False
+
+
+def _fuse_results(
+    dense: List[Dict[str, Any]],
+    keyword: List[Dict[str, Any]],
+    top_k: int,
+    rrf_k: int = 60,
+) -> List[Dict[str, Any]]:
+    """Reciprocal-rank fusion of dense and keyword result lists"""
+    fused: Dict[str, Dict[str, Any]] = {}
+    scores: Dict[str, float] = {}
+
+    for result_list in (dense, keyword):
+        for rank, result in enumerate(result_list):
+            key = result["id"]
+            scores[key] = scores.get(key, 0.0) + 1.0 / (rrf_k + rank + 1)
+            existing = fused.get(key)
+            if existing is None or result["similarity"] > existing["similarity"]:
+                fused[key] = result
+
+    ordered = sorted(fused.values(), key=lambda r: scores[r["id"]], reverse=True)
+    return ordered[:top_k]
 
 
 def _vector_literal(embedding: List[float]) -> str:

@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from app.core.config import Settings
 from app.core.llm import get_chat_client
 from app.models.campaign import Campaign
+from app.models.document import Document
 from app.models.meeting import Meeting
 from app.services.research_service import ResearchService
 from app.services.vector_service import VectorService
@@ -39,6 +40,7 @@ class ChatbotService:
 You have extensive knowledge about Tulsa government, civic processes, city services, local politics, and community engagement opportunities. Feel free to provide detailed, conversational responses that help people understand and get involved in their local government.
 
 RESPONSE APPROACH:
+- **Never invent specific figures, vote outcomes, or ordinance text.** For dollar amounts, budget lines, or what the law says, use document search and cite the source; if the corpus doesn't contain the answer, say so plainly and point to the official source (cityoftulsa.org, tulsacouncil.org) instead of guessing
 - Be conversational, helpful, and encouraging
 - Provide as much detail as needed to fully answer questions
 - Use your knowledge to give comprehensive, nuanced responses
@@ -436,24 +438,58 @@ Be natural, conversational, and as helpful as possible in encouraging civic part
                 )
 
                 if results:
+                    # Resolve source documents so every excerpt carries a
+                    # citation: title, source link, and retrieval date.
+                    doc_ids = {
+                        result["metadata"]["document_id"]
+                        for result in results
+                        if result.get("metadata")
+                    }
+                    documents = (
+                        {
+                            doc.id: doc
+                            for doc in self.db.query(Document)
+                            .filter(Document.id.in_(doc_ids))
+                            .all()
+                        }
+                        if doc_ids
+                        else {}
+                    )
+
                     formatted_results = "**Relevant Tulsa Documents:**\n\n"
                     for i, result in enumerate(results, 1):
                         metadata = result.get("metadata", {})
                         content = result.get("content", "")
-                        similarity = result.get("similarity", 0)
+                        document = documents.get(metadata.get("document_id"))
 
-                        formatted_results += (
-                            f"**{i}. Document Excerpt** (relevance: {similarity:.2f})\n"
-                        )
+                        title = document.title if document else "Document excerpt"
+                        if document and document.source_url:
+                            formatted_results += f"**{i}. [{title}]({document.source_url})**\n"
+                        else:
+                            formatted_results += f"**{i}. {title}**\n"
+
+                        details = []
                         if metadata.get("document_type"):
-                            formatted_results += f"Type: {metadata['document_type']}\n"
+                            details.append(metadata["document_type"])
                         if metadata.get("category"):
-                            formatted_results += f"Category: {metadata['category']}\n"
-                        formatted_results += f"Content: {content[:300]}...\n\n"
+                            details.append(metadata["category"])
+                        if document and document.retrieved_at:
+                            details.append(
+                                f"retrieved {document.retrieved_at.strftime('%Y-%m-%d')}"
+                            )
+                        if details:
+                            formatted_results += f"*{' · '.join(details)}*\n"
+
+                        formatted_results += f"> {content[:300]}...\n\n"
 
                     return formatted_results
                 else:
-                    return "No relevant documents found in the database."
+                    return (
+                        "No matching documents in the indexed corpus. For "
+                        "authoritative information, check "
+                        "[cityoftulsa.org](https://www.cityoftulsa.org) or "
+                        "[tulsacouncil.org](https://www.tulsacouncil.org)."
+                    )
 
             elif function_name == "retrieve_document":
                 url = arguments.get("url", "")

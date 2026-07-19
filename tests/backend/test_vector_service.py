@@ -147,7 +147,46 @@ async def test_search_excludes_private_documents(db_session, vector_service):
 
 
 @pytest.mark.asyncio
-async def test_search_returns_empty_without_embeddings(db_session, vector_service):
+async def test_keyword_search_works_without_embedding_provider(
+    db_session, vector_service
+):
+    """Search-before-chat: the corpus stays searchable with zero LLM keys"""
+    _make_document(db_session, 1)
+    _make_chunk(db_session, 1, 0, "The parks and recreation budget increased")
+    _make_chunk(db_session, 1, 1, "Airport authority quarterly report")
+
+    vector_service.embedding_service.generate_embedding = AsyncMock(return_value=[])
+
+    results = await vector_service.search_documents("parks budget", top_k=5)
+
+    assert len(results) == 1
+    assert "parks" in results[0]["content"].lower()
+
+
+@pytest.mark.asyncio
+async def test_hybrid_fuses_dense_and_keyword(db_session, vector_service):
+    _make_document(db_session, 1)
+    semantic_hit = _make_chunk(db_session, 1, 0, "funding for green spaces")
+    keyword_hit = _make_chunk(db_session, 1, 1, "the parks department update")
+    semantic_hit.embedding_vector = [1.0, 0.0]
+    keyword_hit.embedding_vector = [0.0, 1.0]
+    db_session.commit()
+
+    vector_service.embedding_service.generate_embedding = AsyncMock(
+        return_value=[1.0, 0.0]
+    )
+
+    results = await vector_service.search_documents("parks", top_k=5)
+
+    contents = {result["content"] for result in results}
+    # Dense retrieval surfaces the semantic hit; keyword retrieval surfaces
+    # the literal match; fusion returns both.
+    assert "funding for green spaces" in contents
+    assert "the parks department update" in contents
+
+
+@pytest.mark.asyncio
+async def test_search_returns_empty_on_empty_corpus(db_session, vector_service):
     vector_service.embedding_service.generate_embedding = AsyncMock(return_value=[])
     results = await vector_service.search_documents("anything")
     assert results == []
