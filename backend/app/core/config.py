@@ -92,6 +92,8 @@ class Settings(BaseSettings):
 
     # RAG Configuration
     enable_rag: bool = True
+    # Second-pass claim verification on tool-grounded answers (refuse > invent)
+    enable_claim_verification: bool = True
     max_tokens: int = 4000
     temperature: float = 0.7
     chunk_size: int = 1000
