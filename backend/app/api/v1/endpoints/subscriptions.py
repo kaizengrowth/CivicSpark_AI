@@ -2,8 +2,9 @@ import secrets
 from datetime import datetime, timedelta
 from typing import List
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.database import get_db
+from app.core.tokens import verify_unsubscribe_token
 from app.models.notification_preferences import NotificationPreferences
 from app.models.subscription import MeetingTopic, TopicSubscription
 from app.schemas.notification_preferences import (
@@ -251,9 +252,59 @@ async def confirm_subscription(
     }
 
 
+def _deactivate_subscription(db: Session, subscription: TopicSubscription) -> None:
+    subscription.is_active = False
+    subscription.updated_at = datetime.utcnow()
+
+    # Update subscriber counts for topics
+    for topic_name in subscription.interested_topics or []:
+        topic = db.query(MeetingTopic).filter(MeetingTopic.name == topic_name).first()
+        if topic and topic.subscriber_count > 0:
+            topic.subscriber_count -= 1
+
+    db.commit()
+
+
+@router.get("/unsubscribe")
+async def unsubscribe_by_token(
+    token: str,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """One-click unsubscribe from a notification link.
+
+    The signed token identifies the subscription without exposing
+    enumerable IDs and works from an email or SMS without login.
+    """
+    subscription_id = verify_unsubscribe_token(settings, token)
+    if subscription_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired unsubscribe link",
+        )
+
+    subscription = (
+        db.query(TopicSubscription)
+        .filter(TopicSubscription.id == subscription_id)
+        .first()
+    )
+    if not subscription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found"
+        )
+
+    if subscription.is_active:
+        _deactivate_subscription(db, subscription)
+
+    return {
+        "message": "You have been unsubscribed from meeting notifications.",
+        "resubscribe": "/signup/notifications",
+    }
+
+
 @router.delete("/unsubscribe/{subscription_id}")
 async def unsubscribe(subscription_id: int, db: Session = Depends(get_db)):
-    """Unsubscribe from notifications"""
+    """Unsubscribe from notifications (authenticated app flow)"""
 
     subscription = (
         db.query(TopicSubscription)
@@ -266,16 +317,7 @@ async def unsubscribe(subscription_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found"
         )
 
-    subscription.is_active = False
-    subscription.updated_at = datetime.utcnow()
-
-    # Update subscriber counts for topics
-    for topic_name in subscription.interested_topics or []:
-        topic = db.query(MeetingTopic).filter(MeetingTopic.name == topic_name).first()
-        if topic and topic.subscriber_count > 0:
-            topic.subscriber_count -= 1
-
-    db.commit()
+    _deactivate_subscription(db, subscription)
 
     return {"message": "Successfully unsubscribed"}
 
