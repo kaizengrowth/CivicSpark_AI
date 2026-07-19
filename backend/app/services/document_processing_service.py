@@ -34,11 +34,20 @@ except ImportError:
 from app.core.config import Settings
 from app.core.llm import get_chat_client
 from app.models.document import Document, DocumentChunk
+from app.models.meeting import AgendaItem
+from app.services.agenda_parser import (
+    item_chunk_title,
+    normalize_item_number,
+    parse_agenda_items,
+)
 from app.services.vector_service import VectorService
 from docx import Document as DocxDocument
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+# Document types that carry agenda-item structure worth preserving.
+AGENDA_DOCUMENT_TYPES = {"agenda", "minutes", "meeting_minutes"}
 
 
 class DocumentProcessor:
@@ -47,9 +56,14 @@ class DocumentProcessor:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.openai_client, self.chat_model = get_chat_client(settings)
-        self.encoding = (
-            tiktoken.get_encoding("cl100k_base") if TIKTOKEN_AVAILABLE else None
-        )  # GPT-4 encoding
+        # tiktoken fetches its vocabulary on first use; fall back to the
+        # chars/4 estimate when that isn't possible (offline dev, tests).
+        self.encoding = None
+        if TIKTOKEN_AVAILABLE:
+            try:
+                self.encoding = tiktoken.get_encoding("cl100k_base")
+            except Exception as e:
+                logger.warning(f"tiktoken unavailable, using char estimate: {e}")
 
     def detect_file_type(self, file_path: str) -> str:
         """Detect file MIME type"""
@@ -452,8 +466,10 @@ class DocumentProcessingService:
             stored_path = self._store_file(file_path)
 
             # Create document record
+            meeting_id = document_data.get("meeting_id")
             document = Document(
                 title=document_data.get("title", Path(file_path).stem),
+                meeting_id=meeting_id,
                 content=cleaned_text,
                 summary=summary,
                 document_type=document_data.get("document_type", "unknown"),
@@ -481,12 +497,29 @@ class DocumentProcessingService:
             self.db.commit()
             self.db.refresh(document)
 
-            # Chunk the text
-            chunks_data = self.processor.chunk_text(cleaned_text)
+            # Chunk the text: by agenda item when the document has that
+            # structure, fixed windows otherwise.
+            chunks_data = self._chunk_document(cleaned_text, document.document_type)
+
+            # Match parsed item numbers to structured AgendaItem rows so
+            # chunks carry real identity keys, not just labels.
+            item_id_by_number = {}
+            if meeting_id:
+                agenda_rows = (
+                    self.db.query(AgendaItem)
+                    .filter(AgendaItem.meeting_id == meeting_id)
+                    .all()
+                )
+                item_id_by_number = {
+                    normalize_item_number(row.item_number): row.id
+                    for row in agenda_rows
+                    if row.item_number
+                }
 
             # Create chunk records and prepare for vector store
             chunks_for_vector = []
             for chunk_data in chunks_data:
+                item_number = chunk_data.get("item_number")
                 chunk = DocumentChunk(
                     document_id=document.id,
                     content=chunk_data["content"],
@@ -494,6 +527,13 @@ class DocumentProcessingService:
                     word_count=chunk_data["word_count"],
                     start_char=chunk_data["start_char"],
                     end_char=chunk_data["end_char"],
+                    section_title=chunk_data.get("section_title"),
+                    section_type=chunk_data.get("section_type"),
+                    item_number=item_number,
+                    meeting_id=meeting_id,
+                    agenda_item_id=(
+                        item_id_by_number.get(item_number) if item_number else None
+                    ),
                 )
 
                 self.db.add(chunk)
@@ -538,6 +578,38 @@ class DocumentProcessingService:
                 self.db.commit()
 
             return None
+
+    def _chunk_document(self, cleaned_text: str, document_type: str) -> list:
+        """Chunk by agenda item when structure is present, else fixed windows"""
+        if (document_type or "").lower() in AGENDA_DOCUMENT_TYPES:
+            items = parse_agenda_items(cleaned_text)
+            if items:
+                logger.info(f"Parsed {len(items)} agenda items; chunking by item")
+                return self._chunk_by_items(items)
+            logger.info("No agenda structure found; falling back to fixed windows")
+        return self.processor.chunk_text(cleaned_text)
+
+    def _chunk_by_items(self, items: list) -> list:
+        """One or more chunks per agenda item, item metadata on every chunk"""
+        chunks = []
+        for item in items:
+            body = f"{item.title}\n\n{item.text}".strip()
+            sub_chunks = self.processor.chunk_text(body) or [
+                {
+                    "content": body,
+                    "chunk_index": 0,
+                    "word_count": len(body.split()),
+                    "start_char": 0,
+                    "end_char": 0,
+                }
+            ]
+            for sub in sub_chunks:
+                sub["chunk_index"] = len(chunks)
+                sub["section_title"] = item_chunk_title(item)
+                sub["section_type"] = "agenda_item"
+                sub["item_number"] = item.item_number
+                chunks.append(sub)
+        return chunks
 
     def _store_file(self, file_path: str) -> str:
         """Copy an uploaded file into the configured storage directory"""
